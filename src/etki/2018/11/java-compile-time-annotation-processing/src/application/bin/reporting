@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+ROOT="$( dirname "$DIR" )"
+PROCESSOR_ROOT="$( dirname "$ROOT" )"/processors
+TARGET="$ROOT/target/spool"
+mkdir -p "$TARGET"
+
+javac \
+  -cp "$ROOT/target/application-1.0-SNAPSHOT.jar:$PROCESSOR_ROOT/target/processors-1.0-SNAPSHOT.jar" \
+  -processor io.ayte.presentation.etki.annotation.processing.LoudProcessor \
+  "$ROOT/src/main/java/io/ayte/presentation/etki/annotation/processing/Entrypoint.java" \
+  -d "$TARGET"
