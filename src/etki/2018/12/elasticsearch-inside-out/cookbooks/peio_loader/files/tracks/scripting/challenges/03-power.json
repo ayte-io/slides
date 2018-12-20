@@ -1,0 +1,28 @@
+{
+  "name": "baseline",
+  "default": true,
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 64,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "match_all": {}
+          },
+          "size": 100,
+          "track_scores": true,
+          "sort": {
+            "_script": {
+              "type": "number",
+              "lang": "painless",
+              "source": "Math.pow(1003.14, 1003.14)"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

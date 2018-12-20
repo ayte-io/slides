@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PID="$(ps aux | grep elasticsearch | grep -v -e grep -e x-pack | awk '{print $2}' | head -n 1)"
+if [[ -z "$PID" ]]; then
+    echo "ElasticSearch process not found"
+    exit 1
+fi
+
+OUTPUT="${1:-/tmp/profile.svg}"
+
+echo "Found ElasticSearch process: $PID"
+echo "Recording events..."
+
+exec /usr/local/share/async-java-profiler/extracted/profiler.sh \
+  -i 9999us \
+  -f "$OUTPUT" \
+  -d 600 \
+  "$PID"

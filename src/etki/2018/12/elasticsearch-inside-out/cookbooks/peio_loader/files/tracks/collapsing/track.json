@@ -1,0 +1,15 @@
+{% import "rally.helpers" as rally %}
+{
+  "version": 2,
+  "description": "Collapsing",
+  "indices": [
+    {"name": "wiki-1"},
+    {"name": "wiki-2"},
+    {"name": "wiki-3"},
+    {"name": "wiki-4"},
+    {"name": "wiki-5"}
+  ],
+  "challenges": [
+    {{ rally.collect(parts="challenges/*.json") }}
+  ]
+}

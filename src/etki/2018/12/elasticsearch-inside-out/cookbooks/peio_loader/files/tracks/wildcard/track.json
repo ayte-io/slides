@@ -1,0 +1,9 @@
+{% import "rally.helpers" as rally %}
+{
+  "version": 2,
+  "description": "Wildcard queries",
+  "indices": [{"name": "wiki-1"}],
+  "challenges": [
+    {{ rally.collect(parts="challenges/*.json") }}
+  ]
+}

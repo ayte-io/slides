@@ -1,0 +1,5 @@
+{% include '_shared/operations/index.delete.json' %},
+{% include '_shared/operations/index.create.json' %},
+{% include '_shared/operations/cluster.health.json' %},
+{% include '_shared/operations/index.ingest.json' %},
+{% include '_shared/operations/index.optimize.json' %}

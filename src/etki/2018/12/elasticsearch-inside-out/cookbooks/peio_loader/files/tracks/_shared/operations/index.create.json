@@ -1,0 +1,10 @@
+{
+  "name": "index.create",
+  "operation": {
+    "operation-type": "create-index",
+    "body": {
+      "settings": {% include '_shared/index/settings.json' %},
+      "mappings": {% include '_shared/index/mapping.json' %}
+    }
+  }
+}

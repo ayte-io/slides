@@ -1,0 +1,17 @@
+driver:
+  name: vagrant
+provisioner:
+  name: policyfile_zero
+
+verifier:
+  name: inspec
+
+platforms:
+  - name: ubuntu-18.04
+
+suites:
+  - name: default
+    verifier:
+      inspec_tests: []
+    run_list:
+      - 'recipe[peio_loader::setup]'

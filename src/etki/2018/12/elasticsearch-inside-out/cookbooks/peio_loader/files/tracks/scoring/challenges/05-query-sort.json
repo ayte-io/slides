@@ -1,0 +1,21 @@
+{
+  "name": "query-sort",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 64,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "term": {
+              "all": "queen"
+            }
+          },
+          "sort": "_score"
+        }
+      }
+    }
+  ]
+}

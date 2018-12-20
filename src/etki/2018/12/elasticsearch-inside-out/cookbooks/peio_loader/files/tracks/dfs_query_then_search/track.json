@@ -1,0 +1,12 @@
+{% import "rally.helpers" as rally %}
+{
+  "version": 2,
+  "description": "dfs_query_then_fetch",
+  "indices": [{"name": "wiki"}],
+  "corpora": [
+    {% include "_shared/corpora.json" %}
+  ],
+  "challenges": [
+    {{ rally.collect(parts="challenges/*.json") }}
+  ]
+}

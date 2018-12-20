@@ -1,0 +1,13 @@
+driver:
+  name: vagrant
+provisioner:
+  name: policyfile_zero
+
+verifier:
+  name: inspec
+
+platforms:
+  - name: ubuntu-18.04
+
+suites:
+  - name: default

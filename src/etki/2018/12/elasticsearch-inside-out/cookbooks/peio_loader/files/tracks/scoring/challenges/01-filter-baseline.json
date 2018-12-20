@@ -1,0 +1,20 @@
+{
+  "name": "filter-baseline",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 64,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "filter": {
+            "term": {
+              "all": "queen"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

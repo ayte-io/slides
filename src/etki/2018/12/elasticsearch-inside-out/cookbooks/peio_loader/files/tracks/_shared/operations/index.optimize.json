@@ -1,0 +1,7 @@
+{
+  "name":"index.optimize",
+  "operation": {
+    "operation-type": "force-merge",
+    "max-num-segments": 1
+  }
+}
