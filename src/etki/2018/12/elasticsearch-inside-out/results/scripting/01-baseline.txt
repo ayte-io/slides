@@ -1,0 +1,45 @@
+|   Lap |                          Metric |   Task |       Value |   Unit |
+|------:|--------------------------------:|-------:|------------:|-------:|
+|   All |             Total indexing time |        |      9.8816 |    min |
+|   All |     Min indexing time per shard |        |      0.2784 |    min |
+|   All |  Median indexing time per shard |        |    0.412133 |    min |
+|   All |     Max indexing time per shard |        |    0.456533 |    min |
+|   All |                Total merge time |        |     1.18882 |    min |
+|   All |        Min merge time per shard |        |   0.0330833 |    min |
+|   All |     Median merge time per shard |        |   0.0455333 |    min |
+|   All |        Max merge time per shard |        |     0.08825 |    min |
+|   All |              Total refresh time |        |     0.03445 |    min |
+|   All |      Min refresh time per shard |        |      0.0001 |    min |
+|   All |   Median refresh time per shard |        | 0.000216667 |    min |
+|   All |      Max refresh time per shard |        |   0.0289667 |    min |
+|   All |                Total flush time |        |  0.00106667 |    min |
+|   All |        Min flush time per shard |        |           0 |    min |
+|   All |     Median flush time per shard |        |           0 |    min |
+|   All |        Max flush time per shard |        |      0.0002 |    min |
+|   All |              Total Young Gen GC |        |       30.81 |      s |
+|   All |                Total Old Gen GC |        |           0 |      s |
+|   All |                      Store size |        |     6.85561 |     GB |
+|   All |                   Translog size |        |     6.81276 |     GB |
+|   All |          Heap used for segments |        |     5.76681 |     MB |
+|   All |        Heap used for doc values |        |    0.112667 |     MB |
+|   All |             Heap used for terms |        |     5.32097 |     MB |
+|   All |             Heap used for norms |        |   0.0280762 |     MB |
+|   All |            Heap used for points |        |  0.00880241 |     MB |
+|   All |     Heap used for stored fields |        |    0.296288 |     MB |
+|   All |                   Segment count |        |          25 |        |
+|   All |                  Min Throughput | search |       81.65 |  ops/s |
+|   All |               Median Throughput | search |      132.87 |  ops/s |
+|   All |                  Max Throughput | search |      133.67 |  ops/s |
+|   All |         50th percentile latency | search |     234.766 |     ms |
+|   All |         90th percentile latency | search |     356.527 |     ms |
+|   All |         99th percentile latency | search |     485.139 |     ms |
+|   All |       99.9th percentile latency | search |     587.102 |     ms |
+|   All |      99.99th percentile latency | search |     724.231 |     ms |
+|   All |        100th percentile latency | search |      856.99 |     ms |
+|   All |    50th percentile service time | search |     234.766 |     ms |
+|   All |    90th percentile service time | search |     356.527 |     ms |
+|   All |    99th percentile service time | search |     485.139 |     ms |
+|   All |  99.9th percentile service time | search |     587.102 |     ms |
+|   All | 99.99th percentile service time | search |     724.231 |     ms |
+|   All |   100th percentile service time | search |      856.99 |     ms |
+|   All |                      error rate | search |           0 |      %
