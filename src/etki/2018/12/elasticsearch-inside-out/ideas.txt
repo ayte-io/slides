@@ -1,7 +1,0 @@
-track_scores
-or-queries
-collapsing
-scripting
-too many clauses
-how to read teh fucking explain
-dfs query then search
