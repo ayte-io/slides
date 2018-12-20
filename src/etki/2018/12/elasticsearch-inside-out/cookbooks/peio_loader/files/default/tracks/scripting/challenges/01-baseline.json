@@ -5,7 +5,7 @@
     {
       "name": "search",
       "time-period": 300,
-      "clients": 64,
+      "clients": 32,
       "operation": {
         "operation-type": "search",
         "body": {

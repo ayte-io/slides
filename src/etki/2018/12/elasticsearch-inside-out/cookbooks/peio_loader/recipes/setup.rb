@@ -5,6 +5,7 @@ package 'python3'
 package 'python3-dev'
 package 'python3-pip'
 
+execute 'pip3 install setuptools'
 execute 'pip3 install esrally'
 
 directory '/var/peio'
