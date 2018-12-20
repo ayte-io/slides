@@ -1,6 +1,0 @@
-{
-  "name": "index.delete",
-  "operation": {
-    "operation-type": "delete-index"
-  }
-}

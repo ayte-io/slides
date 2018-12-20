@@ -1,0 +1,21 @@
+{
+  "name": "filter-baseline",
+  "default": true,
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "filter": {
+            "match": {
+              "title": "king"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

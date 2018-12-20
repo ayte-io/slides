@@ -1,0 +1,22 @@
+{
+  "name": "filter-sort",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "filter": {
+            "match": {
+              "title": "king"
+            }
+          },
+          "size": 100,
+          "sort": "_score"
+        }
+      }
+    }
+  ]
+}

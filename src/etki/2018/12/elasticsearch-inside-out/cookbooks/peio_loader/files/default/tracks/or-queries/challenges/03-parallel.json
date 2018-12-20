@@ -1,0 +1,38 @@
+{
+  "name": "parallel",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "parallel": [
+        {
+          "operation": {
+            "operation-type": "search",
+            "body": {
+              "query": {
+                "match": {
+                  "text": "film"
+                }
+              },
+              "size": 100
+            }
+          }
+        },
+        {
+          "operation": {
+            "operation-type": "search",
+            "body": {
+              "query": {
+                "match": {
+                  "text": "movie"
+                }
+              },
+              "size": 100
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

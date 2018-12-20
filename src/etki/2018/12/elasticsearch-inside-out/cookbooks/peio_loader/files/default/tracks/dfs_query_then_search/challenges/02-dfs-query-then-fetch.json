@@ -1,0 +1,22 @@
+{
+  "name": "baseline",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "search_type": "dfs_query_then_fetch",
+          "query": {
+            "match": {
+              "text": "movie"
+            }
+          },
+          "size": 100
+        }
+      }
+    }
+  ]
+}

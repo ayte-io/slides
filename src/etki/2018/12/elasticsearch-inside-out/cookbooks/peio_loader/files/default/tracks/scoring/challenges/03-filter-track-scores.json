@@ -1,0 +1,21 @@
+{
+  "name": "filter-track-scores",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "filter": {
+            "match": {
+              "text": "film"
+            }
+          },
+          "track_scores": true
+        }
+      }
+    }
+  ]
+}

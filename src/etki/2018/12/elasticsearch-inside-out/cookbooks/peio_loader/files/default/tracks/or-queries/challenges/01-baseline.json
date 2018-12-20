@@ -1,0 +1,25 @@
+{
+  "name": "baseline",
+  "default": true,
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "bool": {
+              "should": [
+                {"match": {"text":  "film"}},
+                {"match": {"text":  "movie"}}
+              ]
+            },
+            "size": 100
+          }
+        }
+      }
+    }
+  ]
+}

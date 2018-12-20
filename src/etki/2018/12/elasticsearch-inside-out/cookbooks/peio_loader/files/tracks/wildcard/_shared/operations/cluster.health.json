@@ -1,9 +1,0 @@
-{
-  "name": "cluster.health",
-  "operation": {
-    "operation-type": "cluster-health",
-    "request-params": {
-      "wait_for_status": "green"
-    }
-  }
-}

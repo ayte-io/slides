@@ -1,0 +1,21 @@
+{
+  "name": "wildcard-suffix",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "wildcard": {
+              "text": "prop*"
+            }
+          },
+          "size": 100
+        }
+      }
+    }
+  ]
+}

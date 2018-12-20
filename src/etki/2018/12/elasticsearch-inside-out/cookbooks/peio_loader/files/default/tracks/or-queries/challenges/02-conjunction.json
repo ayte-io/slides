@@ -1,0 +1,24 @@
+{
+  "name": "conjunction",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 128,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "bool": {
+              "must": [
+                {"match": {"text":  "film"}},
+                {"match": {"film":  "movie"}}
+              ]
+            }
+          },
+          "size": 100
+        }
+      }
+    }
+  ]
+}
