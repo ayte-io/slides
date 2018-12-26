@@ -8,13 +8,21 @@ if [[ -z "$PID" ]]; then
     exit 1
 fi
 
-OUTPUT="${1:-/tmp/profile.svg}"
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 <track> <challenge>"
+fi
+
+DIRECTORY="/var/peio/profile/$1"
+mkdir -p "$DIRECTORY"
+chown elasticsearch:elasticsearch "$DIRECTORY"
+
+OUTPUT="$DIRECTORY/$2.svg"
 
 echo "Found ElasticSearch process: $PID"
-echo "Recording events..."
+echo "Recording events to $OUTPUT..."
 
 exec /usr/local/share/async-java-profiler/extracted/profiler.sh \
   -i 9999us \
   -f "$OUTPUT" \
-  -d 600 \
+  -d 300 \
   "$PID"

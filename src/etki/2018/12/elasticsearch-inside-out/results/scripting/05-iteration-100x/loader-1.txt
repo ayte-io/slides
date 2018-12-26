@@ -1,0 +1,33 @@
+|   Lap |                        Metric |   Task |       Value |   Unit |
+|------:|------------------------------:|-------:|------------:|-------:|
+|   All |            Total refresh time |        | 0.000533333 |    min |
+|   All |    Min refresh time per shard |        |           0 |    min |
+|   All | Median refresh time per shard |        | 1.66667e-05 |    min |
+|   All |    Max refresh time per shard |        |      0.0001 |    min |
+|   All |              Total flush time |        |      0.0001 |    min |
+|   All |      Min flush time per shard |        |           0 |    min |
+|   All |   Median flush time per shard |        |           0 |    min |
+|   All |      Max flush time per shard |        | 3.33333e-05 |    min |
+|   All |            Total Young Gen GC |        |       3.005 |      s |
+|   All |              Total Old Gen GC |        |           0 |      s |
+|   All |                    Store size |        |     6.26752 |     GB |
+|   All |                 Translog size |        |     3.47775 |     GB |
+|   All |        Heap used for segments |        |     5.38232 |     MB |
+|   All |      Heap used for doc values |        |    0.109394 |     MB |
+|   All |           Heap used for terms |        |     4.96981 |     MB |
+|   All |           Heap used for norms |        |    0.027771 |     MB |
+|   All |          Heap used for points |        |  0.00808048 |     MB |
+|   All |   Heap used for stored fields |        |    0.267258 |     MB |
+|   All |                 Segment count |        |          25 |        |
+|   All |                Min Throughput | search |        0.07 |  ops/s |
+|   All |             Median Throughput | search |        1.67 |  ops/s |
+|   All |                Max Throughput | search |        1.71 |  ops/s |
+|   All |       50th percentile latency | search |     15485.2 |     ms |
+|   All |       90th percentile latency | search |     27765.2 |     ms |
+|   All |       99th percentile latency | search |     29278.5 |     ms |
+|   All |      100th percentile latency | search |       29422 |     ms |
+|   All |  50th percentile service time | search |     15485.2 |     ms |
+|   All |  90th percentile service time | search |     27765.2 |     ms |
+|   All |  99th percentile service time | search |     29278.5 |     ms |
+|   All | 100th percentile service time | search |       29422 |     ms |
+|   All |                    error rate | search |           0 |      % |

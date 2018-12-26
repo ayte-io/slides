@@ -1,0 +1,24 @@
+{
+  "name": "dfs-query-then-fetch",
+  "schedule": [
+    {
+      "name": "search",
+      "time-period": 300,
+      "clients": 32,
+      "operation": {
+        "operation-type": "search",
+        "body": {
+          "query": {
+            "match": {
+              "text": "movie"
+            }
+          },
+          "size": 100
+        },
+        "request-params": {
+          "search_type": "dfs_query_then_fetch"
+        }
+      }
+    }
+  ]
+}

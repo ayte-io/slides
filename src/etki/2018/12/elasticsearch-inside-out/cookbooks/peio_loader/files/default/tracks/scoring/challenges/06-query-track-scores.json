@@ -9,11 +9,12 @@
         "operation-type": "search",
         "body": {
           "query": {
-            "term": {
-              "all": "queen"
+            "match": {
+              "text": "queen"
             }
           },
-          "track_scores": true
+          "track_scores": true,
+          "size": 100
         }
       }
     }

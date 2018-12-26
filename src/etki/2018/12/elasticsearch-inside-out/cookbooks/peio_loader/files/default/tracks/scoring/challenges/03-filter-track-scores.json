@@ -8,12 +8,19 @@
       "operation": {
         "operation-type": "search",
         "body": {
-          "filter": {
-            "match": {
-              "text": "film"
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "match": {
+                    "text": "king"
+                  }
+                }
+              ]
             }
           },
-          "track_scores": true
+          "track_scores": true,
+          "size": 100
         }
       }
     }

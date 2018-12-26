@@ -1,0 +1,2879 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="1462" onload="init(evt)" viewBox="0 0 1200 1462" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:black; }
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text x="600" y="24" text-anchor="middle" style="font-size:17px">Flame Graph</text>
+<text x="10" y="1445" id="details"> </text>
+<text x="10" y="24" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer">Reset Zoom</text>
+<text x="1090" y="24" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer">Search</text>
+<text x="1090" y="1445" id="matched"> </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (207,623 samples, 100.00%)</title><rect x="10.0" y="1411.0" width="1180.0" height="15" fill="#f77777" rx="2" ry="2"/>
+<text x="13.0" y="1422.0">all</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (596 samples, 0.29%)</title><rect x="10.0" y="1395.0" width="3.4" height="15" fill="#e55c5c" rx="2" ry="2"/>
+<text x="13.0" y="1406.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/lib/x86_64-linux-gnu/libc-2.27.so (191 samples, 0.09%)</title><rect x="10.3" y="1379.0" width="1.1" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="13.3" y="1390.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (346 samples, 0.17%)</title><rect x="11.4" y="1379.0" width="2.0" height="15" fill="#da4d4d" rx="2" ry="2"/>
+<text x="14.4" y="1390.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (225 samples, 0.11%)</title><rect x="12.0" y="1363.0" width="1.3" height="15" fill="#cf3d3d" rx="2" ry="2"/>
+<text x="15.0" y="1374.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.run (202,746 samples, 97.65%)</title><rect x="14.4" y="1395.0" width="1152.2" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="17.4" y="1406.0">java/lang/Thread.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/SingleThreadEventExecutor$5.run (26,871 samples, 12.94%)</title><rect x="14.4" y="1379.0" width="152.7" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="17.4" y="1390.0">io/netty/util/concu..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.run (26,857 samples, 12.94%)</title><rect x="14.5" y="1363.0" width="152.6" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="17.5" y="1374.0">io/netty/channel/ni..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeys (18,844 samples, 9.08%)</title><rect x="14.8" y="1347.0" width="107.1" height="15" fill="#34c934" rx="2" ry="2"/>
+<text x="17.8" y="1358.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeysPlain (18,836 samples, 9.07%)</title><rect x="14.9" y="1331.0" width="107.0" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="17.9" y="1342.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKey (18,754 samples, 9.03%)</title><rect x="15.0" y="1315.0" width="106.6" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="18.0" y="1326.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel$NioByteUnsafe.read (18,666 samples, 8.99%)</title><rect x="15.0" y="1299.0" width="106.1" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="18.0" y="1310.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.fireChannelRead (12,878 samples, 6.20%)</title><rect x="15.7" y="1283.0" width="73.2" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="18.7" y="1294.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (12,878 samples, 6.20%)</title><rect x="15.7" y="1267.0" width="73.2" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="18.7" y="1278.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (12,877 samples, 6.20%)</title><rect x="15.7" y="1251.0" width="73.2" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="18.7" y="1262.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.channelRead (12,876 samples, 6.20%)</title><rect x="15.7" y="1235.0" width="73.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="18.7" y="1246.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (12,876 samples, 6.20%)</title><rect x="15.7" y="1219.0" width="73.2" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="18.7" y="1230.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (12,876 samples, 6.20%)</title><rect x="15.7" y="1203.0" width="73.2" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="18.7" y="1214.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (12,862 samples, 6.19%)</title><rect x="15.7" y="1187.0" width="73.1" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="18.7" y="1198.0">io/netty..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelInboundHandlerAdapter.channelRead (1,014 samples, 0.49%)</title><rect x="15.8" y="1171.0" width="5.7" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="18.8" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (1,014 samples, 0.49%)</title><rect x="15.8" y="1155.0" width="5.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="18.8" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (1,014 samples, 0.49%)</title><rect x="15.8" y="1139.0" width="5.7" height="15" fill="#44d844" rx="2" ry="2"/>
+<text x="18.8" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (1,014 samples, 0.49%)</title><rect x="15.8" y="1123.0" width="5.7" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="18.8" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/timeout/IdleStateHandler.channelRead (1,012 samples, 0.49%)</title><rect x="15.8" y="1107.0" width="5.7" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="18.8" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (1,012 samples, 0.49%)</title><rect x="15.8" y="1091.0" width="5.7" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="18.8" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (1,012 samples, 0.49%)</title><rect x="15.8" y="1075.0" width="5.7" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="18.8" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (1,011 samples, 0.49%)</title><rect x="15.8" y="1059.0" width="5.7" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="18.8" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.channelRead (1,009 samples, 0.49%)</title><rect x="15.8" y="1043.0" width="5.7" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="18.8" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (938 samples, 0.45%)</title><rect x="16.2" y="1027.0" width="5.3" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="19.2" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (938 samples, 0.45%)</title><rect x="16.2" y="1011.0" width="5.3" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="19.2" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (938 samples, 0.45%)</title><rect x="16.2" y="995.0" width="5.3" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="19.2" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (934 samples, 0.45%)</title><rect x="16.2" y="979.0" width="5.3" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="19.2" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageDecoder.channelRead (930 samples, 0.45%)</title><rect x="16.2" y="963.0" width="5.3" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="19.2" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (927 samples, 0.45%)</title><rect x="16.2" y="947.0" width="5.3" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="19.2" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (927 samples, 0.45%)</title><rect x="16.2" y="931.0" width="5.3" height="15" fill="#6afc6a" rx="2" ry="2"/>
+<text x="19.2" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (927 samples, 0.45%)</title><rect x="16.2" y="915.0" width="5.3" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="19.2" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageDecoder.channelRead (927 samples, 0.45%)</title><rect x="16.2" y="899.0" width="5.3" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="19.2" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (916 samples, 0.44%)</title><rect x="16.2" y="883.0" width="5.2" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="19.2" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (916 samples, 0.44%)</title><rect x="16.2" y="867.0" width="5.2" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="19.2" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (916 samples, 0.44%)</title><rect x="16.2" y="851.0" width="5.2" height="15" fill="#53e753" rx="2" ry="2"/>
+<text x="19.2" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageCodec.channelRead (916 samples, 0.44%)</title><rect x="16.2" y="835.0" width="5.2" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="19.2" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageDecoder.channelRead (916 samples, 0.44%)</title><rect x="16.2" y="819.0" width="5.2" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="19.2" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (912 samples, 0.44%)</title><rect x="16.2" y="803.0" width="5.2" height="15" fill="#57e957" rx="2" ry="2"/>
+<text x="19.2" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (911 samples, 0.44%)</title><rect x="16.2" y="787.0" width="5.2" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="19.2" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (911 samples, 0.44%)</title><rect x="16.2" y="771.0" width="5.2" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="19.2" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/http/netty4/pipelining/HttpPipeliningHandler.channelRead (911 samples, 0.44%)</title><rect x="16.2" y="755.0" width="5.2" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="19.2" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (911 samples, 0.44%)</title><rect x="16.2" y="739.0" width="5.2" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="19.2" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (909 samples, 0.44%)</title><rect x="16.2" y="723.0" width="5.2" height="15" fill="#44d844" rx="2" ry="2"/>
+<text x="19.2" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (909 samples, 0.44%)</title><rect x="16.2" y="707.0" width="5.2" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="19.2" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/SimpleChannelInboundHandler.channelRead (909 samples, 0.44%)</title><rect x="16.2" y="691.0" width="5.2" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="19.2" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/http/netty4/Netty4HttpRequestHandler.channelRead0 (906 samples, 0.44%)</title><rect x="16.2" y="675.0" width="5.2" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="19.2" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/http/netty4/Netty4HttpServerTransport.dispatchRequest (832 samples, 0.40%)</title><rect x="16.6" y="659.0" width="4.8" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="19.6" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/RestController.dispatchRequest (829 samples, 0.40%)</title><rect x="16.7" y="643.0" width="4.7" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="19.7" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/RestController.tryAllHandlers (829 samples, 0.40%)</title><rect x="16.7" y="627.0" width="4.7" height="15" fill="#66f866" rx="2" ry="2"/>
+<text x="19.7" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/RestController.dispatchRequest (790 samples, 0.38%)</title><rect x="16.8" y="611.0" width="4.5" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="19.8" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/xpack/security/rest/SecurityRestFilter.handleRequest (745 samples, 0.36%)</title><rect x="17.0" y="595.0" width="4.3" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="20.0" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/BaseRestHandler.handleRequest (745 samples, 0.36%)</title><rect x="17.0" y="579.0" width="4.3" height="15" fill="#52e652" rx="2" ry="2"/>
+<text x="20.0" y="590.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction$$Lambda$3150/326044879.accept (526 samples, 0.25%)</title><rect x="17.2" y="563.0" width="3.0" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="20.2" y="574.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction.lambda$prepareRequest$2 (526 samples, 0.25%)</title><rect x="17.2" y="547.0" width="3.0" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="20.2" y="558.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/client/support/AbstractClient.search (525 samples, 0.25%)</title><rect x="17.2" y="531.0" width="3.0" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="20.2" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/client/support/AbstractClient.execute (525 samples, 0.25%)</title><rect x="17.2" y="515.0" width="3.0" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="20.2" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/client/node/NodeClient.doExecute (524 samples, 0.25%)</title><rect x="17.2" y="499.0" width="3.0" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="20.2" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/client/node/NodeClient.executeLocally (524 samples, 0.25%)</title><rect x="17.2" y="483.0" width="3.0" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="20.2" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction.execute (518 samples, 0.25%)</title><rect x="17.2" y="467.0" width="2.9" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="20.2" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction.execute (501 samples, 0.24%)</title><rect x="17.2" y="451.0" width="2.8" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="20.2" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction$RequestFilterChain.proceed (501 samples, 0.24%)</title><rect x="17.2" y="435.0" width="2.8" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="20.2" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/xpack/security/action/filter/SecurityActionFilter.apply (500 samples, 0.24%)</title><rect x="17.2" y="419.0" width="2.8" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="20.2" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction$RequestFilterChain.proceed (495 samples, 0.24%)</title><rect x="17.2" y="403.0" width="2.8" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="20.2" y="414.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/TransportSearchAction.doExecute (495 samples, 0.24%)</title><rect x="17.2" y="387.0" width="2.8" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="20.2" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/TransportSearchAction.doExecute (495 samples, 0.24%)</title><rect x="17.2" y="371.0" width="2.8" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="20.2" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/query/Rewriteable.rewriteAndFetch (493 samples, 0.24%)</title><rect x="17.2" y="355.0" width="2.8" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="20.2" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/query/Rewriteable.rewriteAndFetch (493 samples, 0.24%)</title><rect x="17.2" y="339.0" width="2.8" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="20.2" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/ActionListener$1.onResponse (492 samples, 0.24%)</title><rect x="17.2" y="323.0" width="2.8" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="20.2" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/TransportSearchAction$$Lambda$3153/996574209.accept (492 samples, 0.24%)</title><rect x="17.2" y="307.0" width="2.8" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="20.2" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/TransportSearchAction.lambda$doExecute$4 (492 samples, 0.24%)</title><rect x="17.2" y="291.0" width="2.8" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="20.2" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/TransportSearchAction.executeSearch (479 samples, 0.23%)</title><rect x="17.2" y="275.0" width="2.7" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="20.2" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.start (354 samples, 0.17%)</title><rect x="17.2" y="259.0" width="2.0" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="20.2" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.executePhase (354 samples, 0.17%)</title><rect x="17.2" y="243.0" width="2.0" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="20.2" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/InitialSearchPhase.run (354 samples, 0.17%)</title><rect x="17.2" y="227.0" width="2.0" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="20.2" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/InitialSearchPhase.performPhaseOnShard (348 samples, 0.17%)</title><rect x="17.2" y="211.0" width="2.0" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="20.2" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchQueryThenFetchAsyncAction.executePhaseOnShard (345 samples, 0.17%)</title><rect x="17.2" y="195.0" width="2.0" height="15" fill="#5df05d" rx="2" ry="2"/>
+<text x="20.2" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService.sendExecuteQuery (322 samples, 0.16%)</title><rect x="17.4" y="179.0" width="1.8" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="20.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService.sendChildRequest (317 samples, 0.15%)</title><rect x="17.4" y="163.0" width="1.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="20.4" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService.sendChildRequest (317 samples, 0.15%)</title><rect x="17.4" y="147.0" width="1.8" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="20.4" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService.sendRequest (315 samples, 0.15%)</title><rect x="17.4" y="131.0" width="1.8" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="20.4" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/xpack/security/transport/SecurityServerTransportInterceptor$1.sendRequest (315 samples, 0.15%)</title><rect x="17.4" y="115.0" width="1.8" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="20.4" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService$$Lambda$2118/312226351.sendRequest (314 samples, 0.15%)</title><rect x="17.4" y="99.0" width="1.8" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="20.4" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService.sendRequestInternal (314 samples, 0.15%)</title><rect x="17.4" y="83.0" width="1.8" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="20.4" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport$NodeChannels.sendRequest (245 samples, 0.12%)</title><rect x="17.5" y="67.0" width="1.4" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="20.5" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.access$1900 (243 samples, 0.12%)</title><rect x="17.5" y="51.0" width="1.4" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="20.5" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.sendRequestToChannel (243 samples, 0.12%)</title><rect x="17.5" y="35.0" width="1.4" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="20.5" y="46.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction.prepareRequest (191 samples, 0.09%)</title><rect x="20.2" y="563.0" width="1.1" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="23.2" y="574.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/RestRequest.withContentOrSourceParamParserOrNull (189 samples, 0.09%)</title><rect x="20.2" y="547.0" width="1.1" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="23.2" y="558.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction$$Lambda$3149/406248581.accept (182 samples, 0.09%)</title><rect x="20.2" y="531.0" width="1.1" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="23.2" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction.lambda$prepareRequest$1 (182 samples, 0.09%)</title><rect x="20.2" y="515.0" width="1.1" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="23.2" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/search/RestSearchAction.parseSearchRequest (182 samples, 0.09%)</title><rect x="20.2" y="499.0" width="1.1" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="23.2" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/logging/LoggingHandler.channelRead (11,804 samples, 5.69%)</title><rect x="21.5" y="1171.0" width="67.1" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="24.5" y="1182.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (11,758 samples, 5.66%)</title><rect x="21.6" y="1155.0" width="66.8" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="24.6" y="1166.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (11,758 samples, 5.66%)</title><rect x="21.6" y="1139.0" width="66.8" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="24.6" y="1150.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (11,754 samples, 5.66%)</title><rect x="21.6" y="1123.0" width="66.8" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="24.6" y="1134.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.channelRead (11,740 samples, 5.65%)</title><rect x="21.7" y="1107.0" width="66.7" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="24.7" y="1118.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder$1.cumulate (1,049 samples, 0.51%)</title><rect x="21.9" y="1091.0" width="6.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="24.9" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (974 samples, 0.47%)</title><rect x="22.0" y="1075.0" width="5.5" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="25.0" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (974 samples, 0.47%)</title><rect x="22.0" y="1059.0" width="5.5" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="25.0" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (974 samples, 0.47%)</title><rect x="22.0" y="1043.0" width="5.5" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="25.0" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable (968 samples, 0.47%)</title><rect x="22.0" y="1027.0" width="5.5" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="25.0" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable0 (968 samples, 0.47%)</title><rect x="22.0" y="1011.0" width="5.5" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="25.0" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (921 samples, 0.44%)</title><rect x="22.2" y="995.0" width="5.3" height="15" fill="#f06c6c" rx="2" ry="2"/>
+<text x="25.2" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.callDecode (10,614 samples, 5.11%)</title><rect x="27.9" y="1091.0" width="60.3" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="30.9" y="1102.0">io/net..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.decodeRemovalReentryProtection (1,429 samples, 0.69%)</title><rect x="28.7" y="1075.0" width="8.1" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="31.7" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/Netty4SizeHeaderFrameDecoder.decode (1,419 samples, 0.68%)</title><rect x="28.7" y="1059.0" width="8.1" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="31.7" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.validateMessageHeader (1,408 samples, 0.68%)</title><rect x="28.8" y="1043.0" width="8.0" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="31.8" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/IllegalStateException.&lt;init&gt; (1,407 samples, 0.68%)</title><rect x="28.8" y="1027.0" width="8.0" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="31.8" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/RuntimeException.&lt;init&gt; (1,352 samples, 0.65%)</title><rect x="29.1" y="1011.0" width="7.6" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="32.1" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Exception.&lt;init&gt; (1,350 samples, 0.65%)</title><rect x="29.1" y="995.0" width="7.6" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="32.1" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Throwable.&lt;init&gt; (1,350 samples, 0.65%)</title><rect x="29.1" y="979.0" width="7.6" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="32.1" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Throwable.fillInStackTrace (1,345 samples, 0.65%)</title><rect x="29.1" y="963.0" width="7.6" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="32.1" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Throwable.fillInStackTrace (1,321 samples, 0.64%)</title><rect x="29.2" y="947.0" width="7.5" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="32.2" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Java_java_lang_Throwable_fillInStackTrace (1,284 samples, 0.62%)</title><rect x="29.4" y="931.0" width="7.3" height="15" fill="#f27070" rx="2" ry="2"/>
+<text x="32.4" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>JVM_FillInStackTrace (1,256 samples, 0.60%)</title><rect x="29.6" y="915.0" width="7.1" height="15" fill="#f47272" rx="2" ry="2"/>
+<text x="32.6" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (1,239 samples, 0.60%)</title><rect x="29.6" y="899.0" width="7.1" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="32.6" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (1,163 samples, 0.56%)</title><rect x="29.9" y="883.0" width="6.6" height="15" fill="#d13f3f" rx="2" ry="2"/>
+<text x="32.9" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (655 samples, 0.32%)</title><rect x="32.4" y="867.0" width="3.7" height="15" fill="#ee6a6a" rx="2" ry="2"/>
+<text x="35.4" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (278 samples, 0.13%)</title><rect x="34.3" y="851.0" width="1.6" height="15" fill="#eb6666" rx="2" ry="2"/>
+<text x="37.3" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (9,041 samples, 4.35%)</title><rect x="36.8" y="1075.0" width="51.4" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="39.8" y="1086.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (9,041 samples, 4.35%)</title><rect x="36.8" y="1059.0" width="51.4" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="39.8" y="1070.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (9,041 samples, 4.35%)</title><rect x="36.8" y="1043.0" width="51.4" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="39.8" y="1054.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (9,040 samples, 4.35%)</title><rect x="36.8" y="1027.0" width="51.4" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="39.8" y="1038.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (9,038 samples, 4.35%)</title><rect x="36.8" y="1011.0" width="51.4" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="39.8" y="1022.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/Netty4MessageChannelHandler.channelRead (9,034 samples, 4.35%)</title><rect x="36.8" y="995.0" width="51.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="39.8" y="1006.0">org/e..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.messageReceived (9,018 samples, 4.34%)</title><rect x="36.9" y="979.0" width="51.3" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="39.9" y="990.0">org/e..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.handleRequest (1,193 samples, 0.57%)</title><rect x="38.4" y="963.0" width="6.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="41.4" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/EsExecutors$1.execute (775 samples, 0.37%)</title><rect x="39.0" y="947.0" width="4.4" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="42.0" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (771 samples, 0.37%)</title><rect x="39.0" y="931.0" width="4.4" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="42.0" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport$RequestHandler.doRun (768 samples, 0.37%)</title><rect x="39.1" y="915.0" width="4.3" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="42.1" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/RequestHandlerRegistry.processMessageReceived (768 samples, 0.37%)</title><rect x="39.1" y="899.0" width="4.3" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="42.1" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/xpack/security/transport/SecurityServerTransportInterceptor$ProfileSecuredRequestHandler.messageReceived (680 samples, 0.33%)</title><rect x="39.6" y="883.0" width="3.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="42.6" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (651 samples, 0.31%)</title><rect x="39.6" y="867.0" width="3.7" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="42.6" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/xpack/security/transport/SecurityServerTransportInterceptor$ProfileSecuredRequestHandler$1.doRun (651 samples, 0.31%)</title><rect x="39.6" y="851.0" width="3.7" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="42.6" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService$3.messageReceived (557 samples, 0.27%)</title><rect x="39.6" y="835.0" width="3.1" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="42.6" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService$3.messageReceived (557 samples, 0.27%)</title><rect x="39.6" y="819.0" width="3.1" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="42.6" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TaskTransportChannel.sendResponse (509 samples, 0.25%)</title><rect x="39.8" y="803.0" width="2.9" height="15" fill="#52e652" rx="2" ry="2"/>
+<text x="42.8" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransportChannel.sendResponse (497 samples, 0.24%)</title><rect x="39.9" y="787.0" width="2.8" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="42.9" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransportChannel.sendResponse (497 samples, 0.24%)</title><rect x="39.9" y="771.0" width="2.8" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="42.9" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.sendResponse (497 samples, 0.24%)</title><rect x="39.9" y="755.0" width="2.8" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="42.9" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.sendResponse (497 samples, 0.24%)</title><rect x="39.9" y="739.0" width="2.8" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="42.9" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.internalSendMessage (379 samples, 0.18%)</title><rect x="40.5" y="723.0" width="2.2" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="43.5" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/NettyTcpChannel.sendMessage (379 samples, 0.18%)</title><rect x="40.5" y="707.0" width="2.2" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="43.5" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel.writeAndFlush (348 samples, 0.17%)</title><rect x="40.5" y="691.0" width="2.0" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="43.5" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.writeAndFlush (348 samples, 0.17%)</title><rect x="40.5" y="675.0" width="2.0" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="43.5" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.writeAndFlush (348 samples, 0.17%)</title><rect x="40.5" y="659.0" width="2.0" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="43.5" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (348 samples, 0.17%)</title><rect x="40.5" y="643.0" width="2.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="43.5" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWriteAndFlush (341 samples, 0.16%)</title><rect x="40.6" y="627.0" width="1.9" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="43.6" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (250 samples, 0.12%)</title><rect x="40.6" y="611.0" width="1.4" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="43.6" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.flush (250 samples, 0.12%)</title><rect x="40.6" y="595.0" width="1.4" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="43.6" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (250 samples, 0.12%)</title><rect x="40.6" y="579.0" width="1.4" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="43.6" y="590.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (250 samples, 0.12%)</title><rect x="40.6" y="563.0" width="1.4" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="43.6" y="574.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (250 samples, 0.12%)</title><rect x="40.6" y="547.0" width="1.4" height="15" fill="#54e854" rx="2" ry="2"/>
+<text x="43.6" y="558.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/logging/LoggingHandler.flush (248 samples, 0.12%)</title><rect x="40.6" y="531.0" width="1.4" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="43.6" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (245 samples, 0.12%)</title><rect x="40.6" y="515.0" width="1.4" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="43.6" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (245 samples, 0.12%)</title><rect x="40.6" y="499.0" width="1.4" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="43.6" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (245 samples, 0.12%)</title><rect x="40.6" y="483.0" width="1.4" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="43.6" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.flush (244 samples, 0.12%)</title><rect x="40.6" y="467.0" width="1.4" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="43.6" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush (243 samples, 0.12%)</title><rect x="40.6" y="451.0" width="1.4" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="43.6" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0 (242 samples, 0.12%)</title><rect x="40.6" y="435.0" width="1.4" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="43.6" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush0 (242 samples, 0.12%)</title><rect x="40.6" y="419.0" width="1.4" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="43.6" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doWrite (241 samples, 0.12%)</title><rect x="40.6" y="403.0" width="1.4" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="43.6" y="414.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (178 samples, 0.09%)</title><rect x="41.0" y="387.0" width="1.0" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="44.0" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/RequestHandlerRegistry.newRequest (228 samples, 0.11%)</title><rect x="43.5" y="947.0" width="1.2" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="46.5" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/Streamable$$Lambda$2125/447878707.read (228 samples, 0.11%)</title><rect x="43.5" y="931.0" width="1.2" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="46.5" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/Streamable.lambda$newWriteableReader$0 (228 samples, 0.11%)</title><rect x="43.5" y="915.0" width="1.2" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="46.5" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/internal/ShardSearchTransportRequest.readFrom (187 samples, 0.09%)</title><rect x="43.7" y="899.0" width="1.0" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="46.7" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.handleResponse (7,494 samples, 3.61%)</title><rect x="45.2" y="963.0" width="42.6" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="48.2" y="974.0">org/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/EsExecutors$1.execute (4,467 samples, 2.15%)</title><rect x="45.2" y="947.0" width="25.4" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="48.2" y="958.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (4,467 samples, 2.15%)</title><rect x="45.2" y="931.0" width="25.4" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="48.2" y="942.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport$2.doRun (4,467 samples, 2.15%)</title><rect x="45.2" y="915.0" width="25.4" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="48.2" y="926.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService$ContextRestoreResponseHandler.handleResponse (4,467 samples, 2.15%)</title><rect x="45.2" y="899.0" width="25.4" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="48.2" y="910.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService$ConnectionCountingHandler.handleResponse (4,429 samples, 2.13%)</title><rect x="45.2" y="883.0" width="25.2" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="48.2" y="894.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/ActionListenerResponseHandler.handleResponse (4,404 samples, 2.12%)</title><rect x="45.3" y="867.0" width="25.1" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="48.3" y="878.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchActionListener.onResponse (4,328 samples, 2.08%)</title><rect x="45.3" y="851.0" width="24.6" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="48.3" y="862.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchActionListener.onResponse (4,328 samples, 2.08%)</title><rect x="45.3" y="835.0" width="24.6" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="48.3" y="846.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase$2.innerOnResponse (4,328 samples, 2.08%)</title><rect x="45.3" y="819.0" width="24.6" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="48.3" y="830.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase$2.innerOnResponse (4,328 samples, 2.08%)</title><rect x="45.3" y="803.0" width="24.6" height="15" fill="#48dd48" rx="2" ry="2"/>
+<text x="48.3" y="814.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/CountedCollector.onResult (4,328 samples, 2.08%)</title><rect x="45.3" y="787.0" width="24.6" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="48.3" y="798.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/CountedCollector.countDown (4,325 samples, 2.08%)</title><rect x="45.3" y="771.0" width="24.6" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="48.3" y="782.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase$$Lambda$3218/1741012716.run (4,323 samples, 2.08%)</title><rect x="45.3" y="755.0" width="24.6" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="48.3" y="766.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase.lambda$innerRun$2 (4,323 samples, 2.08%)</title><rect x="45.3" y="739.0" width="24.6" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="48.3" y="750.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase.moveToNextPhase (4,323 samples, 2.08%)</title><rect x="45.3" y="723.0" width="24.6" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="48.3" y="734.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.executeNextPhase (4,257 samples, 2.05%)</title><rect x="45.4" y="707.0" width="24.2" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="48.4" y="718.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.executePhase (4,253 samples, 2.05%)</title><rect x="45.4" y="691.0" width="24.2" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="48.4" y="702.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/ExpandSearchPhase.run (4,253 samples, 2.05%)</title><rect x="45.4" y="675.0" width="24.2" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="48.4" y="686.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.executeNextPhase (4,253 samples, 2.05%)</title><rect x="45.4" y="659.0" width="24.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="48.4" y="670.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.executePhase (4,253 samples, 2.05%)</title><rect x="45.4" y="643.0" width="24.2" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="48.4" y="654.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase$3.run (4,253 samples, 2.05%)</title><rect x="45.4" y="627.0" width="24.2" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="48.4" y="638.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.onResponse (4,250 samples, 2.05%)</title><rect x="45.4" y="611.0" width="24.2" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="48.4" y="622.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/AbstractSearchAsyncAction.onResponse (4,250 samples, 2.05%)</title><rect x="45.4" y="595.0" width="24.2" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="48.4" y="606.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction$1.onResponse (4,250 samples, 2.05%)</title><rect x="45.4" y="579.0" width="24.2" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="48.4" y="590.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/support/TransportAction$1.onResponse (4,250 samples, 2.05%)</title><rect x="45.4" y="563.0" width="24.2" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="48.4" y="574.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestActionListener.onResponse (4,240 samples, 2.04%)</title><rect x="45.4" y="547.0" width="24.1" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="48.4" y="558.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestResponseListener.processResponse (4,240 samples, 2.04%)</title><rect x="45.4" y="531.0" width="24.1" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="48.4" y="542.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/RestController$ResourceHandlingHttpChannel.sendResponse (279 samples, 0.13%)</title><rect x="45.4" y="515.0" width="1.6" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="48.4" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/http/netty4/Netty4HttpChannel.sendResponse (279 samples, 0.13%)</title><rect x="45.4" y="499.0" width="1.6" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="48.4" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestToXContentListener.buildResponse (3,961 samples, 1.91%)</title><rect x="47.0" y="515.0" width="22.5" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="50.0" y="526.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestToXContentListener.buildResponse (3,961 samples, 1.91%)</title><rect x="47.0" y="499.0" width="22.5" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="50.0" y="510.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestStatusToXContentListener.buildResponse (3,884 samples, 1.87%)</title><rect x="47.4" y="483.0" width="22.1" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="50.4" y="494.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/rest/action/RestStatusToXContentListener.buildResponse (3,884 samples, 1.87%)</title><rect x="47.4" y="467.0" width="22.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="50.4" y="478.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchResponse.toXContent (3,882 samples, 1.87%)</title><rect x="47.4" y="451.0" width="22.1" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="50.4" y="462.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchResponse.innerToXContent (3,875 samples, 1.87%)</title><rect x="47.4" y="435.0" width="22.1" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="50.4" y="446.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchResponseSections.toXContent (3,847 samples, 1.85%)</title><rect x="47.4" y="419.0" width="21.9" height="15" fill="#44d844" rx="2" ry="2"/>
+<text x="50.4" y="430.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHits.toXContent (3,846 samples, 1.85%)</title><rect x="47.4" y="403.0" width="21.9" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="50.4" y="414.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHit.toXContent (3,831 samples, 1.85%)</title><rect x="47.5" y="387.0" width="21.8" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="50.5" y="398.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHit.toInnerXContent (3,803 samples, 1.83%)</title><rect x="47.7" y="371.0" width="21.6" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="50.7" y="382.0">o..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/XContentBuilder.field (209 samples, 0.10%)</title><rect x="47.7" y="355.0" width="1.2" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="50.7" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/XContentHelper.writeRawField (3,471 samples, 1.67%)</title><rect x="48.9" y="355.0" width="19.8" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="51.9" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/XContentBuilder.rawField (3,388 samples, 1.63%)</title><rect x="49.4" y="339.0" width="19.3" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="52.4" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/json/JsonXContentGenerator.writeRawField (3,388 samples, 1.63%)</title><rect x="49.4" y="323.0" width="19.3" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="52.4" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/json/JsonXContentGenerator.writeRawField (3,351 samples, 1.61%)</title><rect x="49.6" y="307.0" width="19.1" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="52.6" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/xcontent/json/JsonXContentGenerator.copyStream (3,282 samples, 1.58%)</title><rect x="49.6" y="291.0" width="18.7" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="52.6" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/io/InputStream.read (1,438 samples, 0.69%)</title><rect x="49.6" y="275.0" width="8.2" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="52.6" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/bytes/BytesReference$MarkSupportingStreamInputWrapper.read (1,438 samples, 0.69%)</title><rect x="49.6" y="259.0" width="8.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="52.6" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/bytes/BytesReferenceStreamInput.read (1,438 samples, 0.69%)</title><rect x="49.6" y="243.0" width="8.2" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="52.6" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (857 samples, 0.41%)</title><rect x="52.5" y="227.0" width="4.9" height="15" fill="#c93434" rx="2" ry="2"/>
+<text x="55.5" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/StreamOutput.write (1,798 samples, 0.87%)</title><rect x="57.8" y="275.0" width="10.2" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="60.8" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/Streams$FlushOnCloseOutputStream.writeBytes (1,798 samples, 0.87%)</title><rect x="57.8" y="259.0" width="10.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="60.8" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/BytesStreamOutput.writeBytes (1,790 samples, 0.86%)</title><rect x="57.8" y="243.0" width="10.2" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="60.8" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/ReleasableBytesStreamOutput.ensureCapacity (1,439 samples, 0.69%)</title><rect x="57.8" y="227.0" width="8.2" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="60.8" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/BytesStreamOutput.ensureCapacity (1,439 samples, 0.69%)</title><rect x="57.8" y="211.0" width="8.2" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="60.8" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigArrays.grow (1,439 samples, 0.69%)</title><rect x="57.8" y="195.0" width="8.2" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="60.8" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigArrays.overSize (327 samples, 0.16%)</title><rect x="57.8" y="179.0" width="1.9" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="60.8" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (310 samples, 0.15%)</title><rect x="57.9" y="163.0" width="1.8" height="15" fill="#f47272" rx="2" ry="2"/>
+<text x="60.9" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigArrays.resize (1,112 samples, 0.54%)</title><rect x="59.7" y="179.0" width="6.3" height="15" fill="#5bed5b" rx="2" ry="2"/>
+<text x="62.7" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigArrays.resizeInPlace (1,079 samples, 0.52%)</title><rect x="59.9" y="163.0" width="6.1" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="62.9" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigByteArray.resize (1,062 samples, 0.51%)</title><rect x="60.0" y="147.0" width="6.0" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="63.0" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/AbstractBigArray.newBytePage (1,055 samples, 0.51%)</title><rect x="60.0" y="131.0" width="6.0" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="63.0" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/PageCacheRecycler.bytePage (1,055 samples, 0.51%)</title><rect x="60.0" y="115.0" width="6.0" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="63.0" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>arrayof_jbyte_fill (815 samples, 0.39%)</title><rect x="60.1" y="99.0" width="4.6" height="15" fill="#cf3c3c" rx="2" ry="2"/>
+<text x="63.1" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/Arrays.fill (185 samples, 0.09%)</title><rect x="64.7" y="99.0" width="1.0" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="67.7" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/BigByteArray.set (350 samples, 0.17%)</title><rect x="66.0" y="227.0" width="2.0" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="69.0" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (309 samples, 0.15%)</title><rect x="66.2" y="211.0" width="1.7" height="15" fill="#ee6a6a" rx="2" ry="2"/>
+<text x="69.2" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportService$ContextRestoreResponseHandler.read (3,027 samples, 1.46%)</title><rect x="70.6" y="947.0" width="17.2" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="73.6" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TransportResponseHandler.read (3,027 samples, 1.46%)</title><rect x="70.6" y="931.0" width="17.2" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="73.6" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/fetch/FetchSearchResult.readFrom (2,709 samples, 1.30%)</title><rect x="70.6" y="915.0" width="15.4" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="73.6" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHits.readSearchHits (2,708 samples, 1.30%)</title><rect x="70.6" y="899.0" width="15.4" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="73.6" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHits.readFrom (2,708 samples, 1.30%)</title><rect x="70.6" y="883.0" width="15.4" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="73.6" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHit.readSearchHit (2,696 samples, 1.30%)</title><rect x="70.7" y="867.0" width="15.3" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="73.7" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchHit.readFrom (2,683 samples, 1.29%)</title><rect x="70.7" y="851.0" width="15.3" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="73.7" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/StreamInput.readBytesReference (1,354 samples, 0.65%)</title><rect x="70.8" y="835.0" width="7.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="73.8" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/StreamInput.readArraySize (1,295 samples, 0.62%)</title><rect x="70.8" y="819.0" width="7.4" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="73.8" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/FilterStreamInput.ensureCanReadBytes (1,250 samples, 0.60%)</title><rect x="71.0" y="803.0" width="7.1" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="74.0" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/StreamInput.readOptionalText (1,233 samples, 0.59%)</title><rect x="78.8" y="835.0" width="7.0" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="81.8" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/StreamInput.readBytesReference (1,189 samples, 0.57%)</title><rect x="78.8" y="819.0" width="6.8" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="81.8" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/io/stream/FilterStreamInput.readBytes (1,168 samples, 0.56%)</title><rect x="79.0" y="803.0" width="6.6" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="82.0" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/ByteBufStreamInput.readBytes (1,158 samples, 0.56%)</title><rect x="79.0" y="787.0" width="6.6" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="82.0" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/ByteBufStreamInput.read (1,151 samples, 0.55%)</title><rect x="79.0" y="771.0" width="6.6" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="82.0" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/ByteBufStreamInput.available (1,081 samples, 0.52%)</title><rect x="79.4" y="755.0" width="6.1" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="82.4" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (1,050 samples, 0.51%)</title><rect x="79.6" y="739.0" width="5.9" height="15" fill="#ca3535" rx="2" ry="2"/>
+<text x="82.6" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QuerySearchResult.readFrom (315 samples, 0.15%)</title><rect x="86.0" y="915.0" width="1.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="89.0" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QuerySearchResult.readFromWithId (308 samples, 0.15%)</title><rect x="86.1" y="899.0" width="1.7" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="89.1" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/lucene/Lucene.readTopDocs (227 samples, 0.11%)</title><rect x="86.5" y="883.0" width="1.3" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="89.5" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/lucene/Lucene.readFieldDoc (212 samples, 0.10%)</title><rect x="86.6" y="867.0" width="1.2" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="89.6" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.fireChannelReadComplete (275 samples, 0.13%)</title><rect x="88.9" y="1283.0" width="1.5" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="91.9" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelReadComplete (275 samples, 0.13%)</title><rect x="88.9" y="1267.0" width="1.5" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="91.9" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelReadComplete (275 samples, 0.13%)</title><rect x="88.9" y="1251.0" width="1.5" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="91.9" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.channelReadComplete (274 samples, 0.13%)</title><rect x="88.9" y="1235.0" width="1.5" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="91.9" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultMaxMessagesRecvByteBufAllocator$MaxMessageHandle.allocate (350 samples, 0.17%)</title><rect x="90.4" y="1283.0" width="2.0" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="93.4" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.ioBuffer (332 samples, 0.16%)</title><rect x="90.5" y="1267.0" width="1.9" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="93.5" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.heapBuffer (331 samples, 0.16%)</title><rect x="90.5" y="1251.0" width="1.9" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="93.5" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.heapBuffer (329 samples, 0.16%)</title><rect x="90.5" y="1235.0" width="1.9" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="93.5" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBufAllocator.newHeapBuffer (324 samples, 0.16%)</title><rect x="90.5" y="1219.0" width="1.9" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="93.5" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (253 samples, 0.12%)</title><rect x="90.7" y="1203.0" width="1.4" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="93.7" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (200 samples, 0.10%)</title><rect x="91.0" y="1187.0" width="1.1" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="94.0" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocateNormal (195 samples, 0.09%)</title><rect x="91.0" y="1171.0" width="1.1" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="94.0" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doReadBytes (4,965 samples, 2.39%)</title><rect x="92.7" y="1283.0" width="28.3" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="95.7" y="1294.0">io..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (4,909 samples, 2.36%)</title><rect x="92.7" y="1267.0" width="27.9" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="95.7" y="1278.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledHeapByteBuf.setBytes (4,909 samples, 2.36%)</title><rect x="92.7" y="1251.0" width="27.9" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="95.7" y="1262.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.read (4,839 samples, 2.33%)</title><rect x="93.1" y="1235.0" width="27.5" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="96.1" y="1246.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.read (4,643 samples, 2.24%)</title><rect x="94.0" y="1219.0" width="26.4" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="97.0" y="1230.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.readIntoNativeBuffer (4,636 samples, 2.23%)</title><rect x="94.0" y="1203.0" width="26.3" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="97.0" y="1214.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jlong_disjoint_arraycopy (687 samples, 0.33%)</title><rect x="94.3" y="1187.0" width="3.9" height="15" fill="#e55d5d" rx="2" ry="2"/>
+<text x="97.3" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.read (3,787 samples, 1.82%)</title><rect x="98.7" y="1187.0" width="21.6" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="101.7" y="1198.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.read0 (3,785 samples, 1.82%)</title><rect x="98.7" y="1171.0" width="21.6" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="101.7" y="1182.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (3,719 samples, 1.79%)</title><rect x="99.0" y="1155.0" width="21.1" height="15" fill="#fc7e7e" rx="2" ry="2"/>
+<text x="102.0" y="1166.0">[..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__read (3,709 samples, 1.79%)</title><rect x="99.1" y="1139.0" width="21.0" height="15" fill="#d14040" rx="2" ry="2"/>
+<text x="102.1" y="1150.0">_..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (3,661 samples, 1.76%)</title><rect x="99.3" y="1123.0" width="20.8" height="15" fill="#f79300" rx="2" ry="2"/>
+<text x="102.3" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (3,650 samples, 1.76%)</title><rect x="99.3" y="1107.0" width="20.7" height="15" fill="#d26e00" rx="2" ry="2"/>
+<text x="102.3" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sys_read (3,508 samples, 1.69%)</title><rect x="99.8" y="1091.0" width="19.9" height="15" fill="#c46000" rx="2" ry="2"/>
+<text x="102.8" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>vfs_read (3,451 samples, 1.66%)</title><rect x="100.1" y="1075.0" width="19.6" height="15" fill="#fa9600" rx="2" ry="2"/>
+<text x="103.1" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__vfs_read (3,323 samples, 1.60%)</title><rect x="100.2" y="1059.0" width="18.9" height="15" fill="#f08c00" rx="2" ry="2"/>
+<text x="103.2" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>new_sync_read (3,309 samples, 1.59%)</title><rect x="100.2" y="1043.0" width="18.8" height="15" fill="#d36f00" rx="2" ry="2"/>
+<text x="103.2" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_read_iter (3,288 samples, 1.58%)</title><rect x="100.3" y="1027.0" width="18.7" height="15" fill="#ee8a00" rx="2" ry="2"/>
+<text x="103.3" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_recvmsg (3,266 samples, 1.57%)</title><rect x="100.5" y="1011.0" width="18.5" height="15" fill="#c76300" rx="2" ry="2"/>
+<text x="103.5" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>inet_recvmsg (3,208 samples, 1.55%)</title><rect x="100.5" y="995.0" width="18.2" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="103.5" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_recvmsg (3,185 samples, 1.53%)</title><rect x="100.6" y="979.0" width="18.1" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="103.6" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__kfree_skb (353 samples, 0.17%)</title><rect x="100.9" y="963.0" width="2.0" height="15" fill="#be5a00" rx="2" ry="2"/>
+<text x="103.9" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>skb_release_all (314 samples, 0.15%)</title><rect x="101.1" y="947.0" width="1.8" height="15" fill="#f08c00" rx="2" ry="2"/>
+<text x="104.1" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>skb_release_data (269 samples, 0.13%)</title><rect x="101.2" y="931.0" width="1.5" height="15" fill="#e68200" rx="2" ry="2"/>
+<text x="104.2" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>skb_copy_datagram_iter (1,825 samples, 0.88%)</title><rect x="104.4" y="963.0" width="10.4" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="107.4" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_page_to_iter (1,184 samples, 0.57%)</title><rect x="105.8" y="947.0" width="6.7" height="15" fill="#d26e00" rx="2" ry="2"/>
+<text x="108.8" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_user_enhanced_fast_string (704 samples, 0.34%)</title><rect x="106.9" y="931.0" width="4.0" height="15" fill="#f99500" rx="2" ry="2"/>
+<text x="109.9" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_user_generic_unrolled (229 samples, 0.11%)</title><rect x="110.9" y="931.0" width="1.3" height="15" fill="#c86400" rx="2" ry="2"/>
+<text x="113.9" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>skb_copy_datagram_iter (371 samples, 0.18%)</title><rect x="112.7" y="947.0" width="2.1" height="15" fill="#e17d00" rx="2" ry="2"/>
+<text x="115.7" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_page_to_iter (307 samples, 0.15%)</title><rect x="113.0" y="931.0" width="1.8" height="15" fill="#d87400" rx="2" ry="2"/>
+<text x="116.0" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_user_enhanced_fast_string (200 samples, 0.10%)</title><rect x="113.2" y="915.0" width="1.2" height="15" fill="#dc7800" rx="2" ry="2"/>
+<text x="116.2" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_cleanup_rbuf (635 samples, 0.31%)</title><rect x="114.8" y="963.0" width="3.6" height="15" fill="#de7a00" rx="2" ry="2"/>
+<text x="117.8" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_send_ack (621 samples, 0.30%)</title><rect x="114.9" y="947.0" width="3.5" height="15" fill="#f08c00" rx="2" ry="2"/>
+<text x="117.9" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_send_ack.part.39 (616 samples, 0.30%)</title><rect x="114.9" y="931.0" width="3.5" height="15" fill="#e78300" rx="2" ry="2"/>
+<text x="117.9" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_transmit_skb (519 samples, 0.25%)</title><rect x="115.4" y="915.0" width="3.0" height="15" fill="#e27e00" rx="2" ry="2"/>
+<text x="118.4" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_queue_xmit (465 samples, 0.22%)</title><rect x="115.6" y="899.0" width="2.7" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="118.6" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_out (434 samples, 0.21%)</title><rect x="115.7" y="883.0" width="2.5" height="15" fill="#e58100" rx="2" ry="2"/>
+<text x="118.7" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_output (422 samples, 0.20%)</title><rect x="115.8" y="867.0" width="2.4" height="15" fill="#c46000" rx="2" ry="2"/>
+<text x="118.8" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_finish_output (411 samples, 0.20%)</title><rect x="115.8" y="851.0" width="2.3" height="15" fill="#de7a00" rx="2" ry="2"/>
+<text x="118.8" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_finish_output2 (389 samples, 0.19%)</title><rect x="115.9" y="835.0" width="2.2" height="15" fill="#bf5b00" rx="2" ry="2"/>
+<text x="118.9" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>dev_queue_xmit (346 samples, 0.17%)</title><rect x="116.1" y="819.0" width="2.0" height="15" fill="#c25e00" rx="2" ry="2"/>
+<text x="119.1" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__dev_queue_xmit (344 samples, 0.17%)</title><rect x="116.1" y="803.0" width="2.0" height="15" fill="#e98500" rx="2" ry="2"/>
+<text x="119.1" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sch_direct_xmit (310 samples, 0.15%)</title><rect x="116.3" y="787.0" width="1.8" height="15" fill="#f89400" rx="2" ry="2"/>
+<text x="119.3" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>dev_hard_start_xmit (274 samples, 0.13%)</title><rect x="116.4" y="771.0" width="1.5" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="119.4" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>start_xmit	[virtio_net] (199 samples, 0.10%)</title><rect x="116.8" y="755.0" width="1.1" height="15" fill="#f08c00" rx="2" ry="2"/>
+<text x="119.8" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.select (3,422 samples, 1.65%)</title><rect x="121.9" y="1347.0" width="19.5" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="124.9" y="1358.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.select (3,388 samples, 1.63%)</title><rect x="122.1" y="1331.0" width="19.3" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="125.1" y="1342.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.lockAndDoSelect (3,386 samples, 1.63%)</title><rect x="122.1" y="1315.0" width="19.3" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="125.1" y="1326.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollSelectorImpl.doSelect (3,295 samples, 1.59%)</title><rect x="122.6" y="1299.0" width="18.8" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="125.6" y="1310.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollArrayWrapper.poll (2,466 samples, 1.19%)</title><rect x="123.1" y="1283.0" width="14.0" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="126.1" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollArrayWrapper.epollWait (2,339 samples, 1.13%)</title><rect x="123.1" y="1267.0" width="13.3" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="126.1" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (2,143 samples, 1.03%)</title><rect x="123.9" y="1251.0" width="12.2" height="15" fill="#f67575" rx="2" ry="2"/>
+<text x="126.9" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>epoll_wait (2,105 samples, 1.01%)</title><rect x="124.1" y="1235.0" width="12.0" height="15" fill="#d84949" rx="2" ry="2"/>
+<text x="127.1" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (1,955 samples, 0.94%)</title><rect x="124.6" y="1219.0" width="11.2" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="127.6" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (1,940 samples, 0.93%)</title><rect x="124.6" y="1203.0" width="11.1" height="15" fill="#dc7800" rx="2" ry="2"/>
+<text x="127.6" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sys_epoll_wait (1,785 samples, 0.86%)</title><rect x="125.3" y="1187.0" width="10.1" height="15" fill="#e37f00" rx="2" ry="2"/>
+<text x="128.3" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ep_poll (1,663 samples, 0.80%)</title><rect x="125.6" y="1171.0" width="9.5" height="15" fill="#e37f00" rx="2" ry="2"/>
+<text x="128.6" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ep_scan_ready_list.constprop.17 (444 samples, 0.21%)</title><rect x="126.1" y="1155.0" width="2.5" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="129.1" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ep_send_events_proc (333 samples, 0.16%)</title><rect x="126.6" y="1139.0" width="1.8" height="15" fill="#ed8900" rx="2" ry="2"/>
+<text x="129.6" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ep_item_poll.isra.10 (211 samples, 0.10%)</title><rect x="126.9" y="1123.0" width="1.2" height="15" fill="#c66200" rx="2" ry="2"/>
+<text x="129.9" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>schedule_hrtimeout_range (1,021 samples, 0.49%)</title><rect x="129.0" y="1155.0" width="5.8" height="15" fill="#f18d00" rx="2" ry="2"/>
+<text x="132.0" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>schedule_hrtimeout_range_clock (1,013 samples, 0.49%)</title><rect x="129.0" y="1139.0" width="5.8" height="15" fill="#cb6700" rx="2" ry="2"/>
+<text x="132.0" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>schedule (871 samples, 0.42%)</title><rect x="129.8" y="1123.0" width="5.0" height="15" fill="#e78300" rx="2" ry="2"/>
+<text x="132.8" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__schedule (859 samples, 0.41%)</title><rect x="129.9" y="1107.0" width="4.9" height="15" fill="#e37f00" rx="2" ry="2"/>
+<text x="132.9" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>finish_task_switch (840 samples, 0.40%)</title><rect x="130.0" y="1091.0" width="4.8" height="15" fill="#f49000" rx="2" ry="2"/>
+<text x="133.0" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ret_from_intr (411 samples, 0.20%)</title><rect x="132.4" y="1075.0" width="2.4" height="15" fill="#cb6700" rx="2" ry="2"/>
+<text x="135.4" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_IRQ (411 samples, 0.20%)</title><rect x="132.4" y="1059.0" width="2.4" height="15" fill="#f49000" rx="2" ry="2"/>
+<text x="135.4" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irq_exit (411 samples, 0.20%)</title><rect x="132.4" y="1043.0" width="2.4" height="15" fill="#da7600" rx="2" ry="2"/>
+<text x="135.4" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__softirqentry_text_start (408 samples, 0.20%)</title><rect x="132.4" y="1027.0" width="2.4" height="15" fill="#d26e00" rx="2" ry="2"/>
+<text x="135.4" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>net_rx_action (384 samples, 0.18%)</title><rect x="132.6" y="1011.0" width="2.2" height="15" fill="#d36f00" rx="2" ry="2"/>
+<text x="135.6" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>virtnet_poll	[virtio_net] (380 samples, 0.18%)</title><rect x="132.6" y="995.0" width="2.2" height="15" fill="#db7700" rx="2" ry="2"/>
+<text x="135.6" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>receive_buf	[virtio_net] (188 samples, 0.09%)</title><rect x="132.6" y="979.0" width="1.1" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="135.6" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollSelectorImpl.updateSelectedKeys (539 samples, 0.26%)</title><rect x="137.1" y="1283.0" width="3.1" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="140.1" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.get (229 samples, 0.11%)</title><rect x="138.0" y="1267.0" width="1.3" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="141.0" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.getNode (229 samples, 0.11%)</title><rect x="138.0" y="1251.0" width="1.3" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="141.0" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.drain (205 samples, 0.10%)</title><rect x="140.2" y="1283.0" width="1.1" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="143.2" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (196 samples, 0.09%)</title><rect x="140.2" y="1267.0" width="1.1" height="15" fill="#d14040" rx="2" ry="2"/>
+<text x="143.2" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/SingleThreadEventExecutor.runAllTasks (4,409 samples, 2.12%)</title><rect x="141.4" y="1347.0" width="25.1" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="144.4" y="1358.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/AbstractEventExecutor.safeExecute (4,298 samples, 2.07%)</title><rect x="142.1" y="1331.0" width="24.4" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="145.1" y="1342.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext$AbstractWriteTask.run (4,297 samples, 2.07%)</title><rect x="142.1" y="1315.0" width="24.4" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="145.1" y="1326.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext$WriteAndFlushTask.write (4,279 samples, 2.06%)</title><rect x="142.1" y="1299.0" width="24.3" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="145.1" y="1310.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext$AbstractWriteTask.write (1,723 samples, 0.83%)</title><rect x="142.1" y="1283.0" width="9.8" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="145.1" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.access$1900 (1,723 samples, 0.83%)</title><rect x="142.1" y="1267.0" width="9.8" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="145.1" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (1,723 samples, 0.83%)</title><rect x="142.1" y="1251.0" width="9.8" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="145.1" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (1,723 samples, 0.83%)</title><rect x="142.1" y="1235.0" width="9.8" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="145.1" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.write (271 samples, 0.13%)</title><rect x="142.1" y="1219.0" width="1.6" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="145.1" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (271 samples, 0.13%)</title><rect x="142.1" y="1203.0" width="1.6" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="145.1" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (270 samples, 0.13%)</title><rect x="142.1" y="1187.0" width="1.6" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="145.1" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (244 samples, 0.12%)</title><rect x="142.1" y="1171.0" width="1.4" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="145.1" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (240 samples, 0.12%)</title><rect x="142.2" y="1155.0" width="1.3" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="145.2" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/logging/LoggingHandler.write (240 samples, 0.12%)</title><rect x="142.2" y="1139.0" width="1.3" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="145.2" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (228 samples, 0.11%)</title><rect x="142.2" y="1123.0" width="1.3" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="145.2" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (228 samples, 0.11%)</title><rect x="142.2" y="1107.0" width="1.3" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="145.2" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (213 samples, 0.10%)</title><rect x="142.2" y="1091.0" width="1.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="145.2" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (212 samples, 0.10%)</title><rect x="142.2" y="1075.0" width="1.2" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="145.2" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (212 samples, 0.10%)</title><rect x="142.2" y="1059.0" width="1.2" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="145.2" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (212 samples, 0.10%)</title><rect x="142.2" y="1043.0" width="1.2" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="145.2" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.filterOutboundMessage (212 samples, 0.10%)</title><rect x="142.2" y="1027.0" width="1.2" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="145.2" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel.newDirectBuffer (186 samples, 0.09%)</title><rect x="142.3" y="1011.0" width="1.1" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="145.3" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/http/netty4/pipelining/HttpPipeliningHandler.write (1,447 samples, 0.70%)</title><rect x="143.7" y="1219.0" width="8.2" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="146.7" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,445 samples, 0.70%)</title><rect x="143.7" y="1203.0" width="8.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="146.7" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,445 samples, 0.70%)</title><rect x="143.7" y="1187.0" width="8.2" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="146.7" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (1,440 samples, 0.69%)</title><rect x="143.7" y="1171.0" width="8.2" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="146.7" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (1,438 samples, 0.69%)</title><rect x="143.7" y="1155.0" width="8.2" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="146.7" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageCodec.write (1,438 samples, 0.69%)</title><rect x="143.7" y="1139.0" width="8.2" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="146.7" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (1,437 samples, 0.69%)</title><rect x="143.7" y="1123.0" width="8.2" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="146.7" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,422 samples, 0.68%)</title><rect x="143.7" y="1107.0" width="8.1" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="146.7" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,422 samples, 0.68%)</title><rect x="143.7" y="1091.0" width="8.1" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="146.7" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (1,421 samples, 0.68%)</title><rect x="143.7" y="1075.0" width="8.1" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="146.7" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (1,421 samples, 0.68%)</title><rect x="143.7" y="1059.0" width="8.1" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="146.7" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (1,421 samples, 0.68%)</title><rect x="143.7" y="1043.0" width="8.1" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="146.7" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,386 samples, 0.67%)</title><rect x="143.7" y="1027.0" width="7.9" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="146.7" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,386 samples, 0.67%)</title><rect x="143.7" y="1011.0" width="7.9" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="146.7" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (1,373 samples, 0.66%)</title><rect x="143.8" y="995.0" width="7.8" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="146.8" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (1,369 samples, 0.66%)</title><rect x="143.8" y="979.0" width="7.8" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="146.8" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/timeout/IdleStateHandler.write (1,369 samples, 0.66%)</title><rect x="143.8" y="963.0" width="7.8" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="146.8" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,369 samples, 0.66%)</title><rect x="143.8" y="947.0" width="7.8" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="146.8" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (1,369 samples, 0.66%)</title><rect x="143.8" y="931.0" width="7.8" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="146.8" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (1,366 samples, 0.66%)</title><rect x="143.8" y="915.0" width="7.8" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="146.8" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (1,366 samples, 0.66%)</title><rect x="143.8" y="899.0" width="7.8" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="146.8" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (1,366 samples, 0.66%)</title><rect x="143.8" y="883.0" width="7.8" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="146.8" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (1,366 samples, 0.66%)</title><rect x="143.8" y="867.0" width="7.8" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="146.8" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.filterOutboundMessage (1,350 samples, 0.65%)</title><rect x="143.9" y="851.0" width="7.7" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="146.9" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel.newDirectBuffer (1,347 samples, 0.65%)</title><rect x="143.9" y="835.0" width="7.7" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="146.9" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (1,292 samples, 0.62%)</title><rect x="143.9" y="819.0" width="7.4" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="146.9" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledDirectByteBuf.setBytes (1,292 samples, 0.62%)</title><rect x="143.9" y="803.0" width="7.4" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="146.9" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledDirectByteBuf.setBytes (1,202 samples, 0.58%)</title><rect x="144.4" y="787.0" width="6.8" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="147.4" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jlong_disjoint_arraycopy (1,150 samples, 0.55%)</title><rect x="144.7" y="771.0" width="6.5" height="15" fill="#e15757" rx="2" ry="2"/>
+<text x="147.7" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.access$1500 (2,556 samples, 1.23%)</title><rect x="151.9" y="1283.0" width="14.5" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="154.9" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (2,556 samples, 1.23%)</title><rect x="151.9" y="1267.0" width="14.5" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="154.9" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (2,555 samples, 1.23%)</title><rect x="151.9" y="1251.0" width="14.5" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="154.9" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.flush (2,554 samples, 1.23%)</title><rect x="151.9" y="1235.0" width="14.5" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="154.9" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (2,554 samples, 1.23%)</title><rect x="151.9" y="1219.0" width="14.5" height="15" fill="#37cc37" rx="2" ry="2"/>
+<text x="154.9" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (2,553 samples, 1.23%)</title><rect x="151.9" y="1203.0" width="14.5" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="154.9" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (2,553 samples, 1.23%)</title><rect x="151.9" y="1187.0" width="14.5" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="154.9" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.flush (1,769 samples, 0.85%)</title><rect x="151.9" y="1171.0" width="10.1" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="154.9" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (1,769 samples, 0.85%)</title><rect x="151.9" y="1155.0" width="10.1" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="154.9" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (1,769 samples, 0.85%)</title><rect x="151.9" y="1139.0" width="10.1" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="154.9" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (1,769 samples, 0.85%)</title><rect x="151.9" y="1123.0" width="10.1" height="15" fill="#4de04d" rx="2" ry="2"/>
+<text x="154.9" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundHandlerAdapter.flush (1,763 samples, 0.85%)</title><rect x="151.9" y="1107.0" width="10.0" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="154.9" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (1,763 samples, 0.85%)</title><rect x="151.9" y="1091.0" width="10.0" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="154.9" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (1,763 samples, 0.85%)</title><rect x="151.9" y="1075.0" width="10.0" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="154.9" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (1,763 samples, 0.85%)</title><rect x="151.9" y="1059.0" width="10.0" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="154.9" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.flush (1,763 samples, 0.85%)</title><rect x="151.9" y="1043.0" width="10.0" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="154.9" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (1,763 samples, 0.85%)</title><rect x="151.9" y="1027.0" width="10.0" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="154.9" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (1,763 samples, 0.85%)</title><rect x="151.9" y="1011.0" width="10.0" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="154.9" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (1,763 samples, 0.85%)</title><rect x="151.9" y="995.0" width="10.0" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="154.9" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.flush (1,762 samples, 0.85%)</title><rect x="151.9" y="979.0" width="10.0" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="154.9" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush (1,760 samples, 0.85%)</title><rect x="151.9" y="963.0" width="10.0" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="154.9" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0 (1,760 samples, 0.85%)</title><rect x="151.9" y="947.0" width="10.0" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="154.9" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush0 (1,760 samples, 0.85%)</title><rect x="151.9" y="931.0" width="10.0" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="154.9" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doWrite (1,759 samples, 0.85%)</title><rect x="151.9" y="915.0" width="10.0" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="154.9" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (1,595 samples, 0.77%)</title><rect x="152.9" y="899.0" width="9.0" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="155.9" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (1,588 samples, 0.76%)</title><rect x="152.9" y="883.0" width="9.0" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="155.9" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.writev (1,583 samples, 0.76%)</title><rect x="152.9" y="867.0" width="9.0" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="155.9" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.writev0 (1,583 samples, 0.76%)</title><rect x="152.9" y="851.0" width="9.0" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="155.9" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (1,576 samples, 0.76%)</title><rect x="153.0" y="835.0" width="8.9" height="15" fill="#e96262" rx="2" ry="2"/>
+<text x="156.0" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (1,576 samples, 0.76%)</title><rect x="153.0" y="819.0" width="8.9" height="15" fill="#f67676" rx="2" ry="2"/>
+<text x="156.0" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>writev (1,575 samples, 0.76%)</title><rect x="153.0" y="803.0" width="8.9" height="15" fill="#c93434" rx="2" ry="2"/>
+<text x="156.0" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (1,572 samples, 0.76%)</title><rect x="153.0" y="787.0" width="8.9" height="15" fill="#dd7900" rx="2" ry="2"/>
+<text x="156.0" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (1,571 samples, 0.76%)</title><rect x="153.0" y="771.0" width="8.9" height="15" fill="#ca6600" rx="2" ry="2"/>
+<text x="156.0" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sys_writev (1,563 samples, 0.75%)</title><rect x="153.0" y="755.0" width="8.9" height="15" fill="#be5a00" rx="2" ry="2"/>
+<text x="156.0" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_writev (1,563 samples, 0.75%)</title><rect x="153.0" y="739.0" width="8.9" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="156.0" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>vfs_writev (1,561 samples, 0.75%)</title><rect x="153.0" y="723.0" width="8.9" height="15" fill="#d06c00" rx="2" ry="2"/>
+<text x="156.0" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_iter_write (1,559 samples, 0.75%)</title><rect x="153.0" y="707.0" width="8.9" height="15" fill="#f79300" rx="2" ry="2"/>
+<text x="156.0" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_iter_readv_writev (1,552 samples, 0.75%)</title><rect x="153.0" y="691.0" width="8.9" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="156.0" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_write_iter (1,548 samples, 0.75%)</title><rect x="153.1" y="675.0" width="8.8" height="15" fill="#db7700" rx="2" ry="2"/>
+<text x="156.1" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_sendmsg (1,547 samples, 0.75%)</title><rect x="153.1" y="659.0" width="8.8" height="15" fill="#d77300" rx="2" ry="2"/>
+<text x="156.1" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>inet_sendmsg (1,544 samples, 0.74%)</title><rect x="153.1" y="643.0" width="8.7" height="15" fill="#fb9700" rx="2" ry="2"/>
+<text x="156.1" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_sendmsg (1,542 samples, 0.74%)</title><rect x="153.1" y="627.0" width="8.7" height="15" fill="#f99500" rx="2" ry="2"/>
+<text x="156.1" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_sendmsg_locked (1,537 samples, 0.74%)</title><rect x="153.1" y="611.0" width="8.7" height="15" fill="#db7700" rx="2" ry="2"/>
+<text x="156.1" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_copy_from_iter_full (1,241 samples, 0.60%)</title><rect x="153.6" y="595.0" width="7.1" height="15" fill="#d16d00" rx="2" ry="2"/>
+<text x="156.6" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>copy_user_enhanced_fast_string (1,233 samples, 0.59%)</title><rect x="153.6" y="579.0" width="7.0" height="15" fill="#d77300" rx="2" ry="2"/>
+<text x="156.6" y="590.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/logging/LoggingHandler.flush (774 samples, 0.37%)</title><rect x="162.0" y="1171.0" width="4.3" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="165.0" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (765 samples, 0.37%)</title><rect x="162.0" y="1155.0" width="4.3" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="165.0" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (763 samples, 0.37%)</title><rect x="162.0" y="1139.0" width="4.3" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="165.0" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (763 samples, 0.37%)</title><rect x="162.0" y="1123.0" width="4.3" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="165.0" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.flush (761 samples, 0.37%)</title><rect x="162.0" y="1107.0" width="4.3" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="165.0" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush (758 samples, 0.37%)</title><rect x="162.0" y="1091.0" width="4.3" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="165.0" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0 (750 samples, 0.36%)</title><rect x="162.1" y="1075.0" width="4.2" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="165.1" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush0 (749 samples, 0.36%)</title><rect x="162.1" y="1059.0" width="4.2" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="165.1" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doWrite (747 samples, 0.36%)</title><rect x="162.1" y="1043.0" width="4.2" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="165.1" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.removeBytes (211 samples, 0.10%)</title><rect x="162.2" y="1027.0" width="1.2" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="165.2" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.remove (205 samples, 0.10%)</title><rect x="162.3" y="1011.0" width="1.1" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="165.3" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (507 samples, 0.24%)</title><rect x="163.4" y="1027.0" width="2.9" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="166.4" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (472 samples, 0.23%)</title><rect x="163.6" y="1011.0" width="2.7" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="166.6" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (470 samples, 0.23%)</title><rect x="163.6" y="995.0" width="2.7" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="166.6" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.write (465 samples, 0.22%)</title><rect x="163.6" y="979.0" width="2.7" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="166.6" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (465 samples, 0.22%)</title><rect x="163.6" y="963.0" width="2.7" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="166.6" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (457 samples, 0.22%)</title><rect x="163.7" y="947.0" width="2.6" height="15" fill="#ee6a6a" rx="2" ry="2"/>
+<text x="166.7" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__write (456 samples, 0.22%)</title><rect x="163.7" y="931.0" width="2.6" height="15" fill="#f16e6e" rx="2" ry="2"/>
+<text x="166.7" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (450 samples, 0.22%)</title><rect x="163.7" y="915.0" width="2.6" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="166.7" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (448 samples, 0.22%)</title><rect x="163.7" y="899.0" width="2.6" height="15" fill="#ec8800" rx="2" ry="2"/>
+<text x="166.7" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sys_write (438 samples, 0.21%)</title><rect x="163.8" y="883.0" width="2.5" height="15" fill="#c66200" rx="2" ry="2"/>
+<text x="166.8" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>vfs_write (428 samples, 0.21%)</title><rect x="163.8" y="867.0" width="2.5" height="15" fill="#e17d00" rx="2" ry="2"/>
+<text x="166.8" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__vfs_write (404 samples, 0.19%)</title><rect x="163.9" y="851.0" width="2.3" height="15" fill="#e48000" rx="2" ry="2"/>
+<text x="166.9" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>new_sync_write (404 samples, 0.19%)</title><rect x="163.9" y="835.0" width="2.3" height="15" fill="#d77300" rx="2" ry="2"/>
+<text x="166.9" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_write_iter (402 samples, 0.19%)</title><rect x="163.9" y="819.0" width="2.3" height="15" fill="#be5a00" rx="2" ry="2"/>
+<text x="166.9" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sock_sendmsg (397 samples, 0.19%)</title><rect x="163.9" y="803.0" width="2.3" height="15" fill="#fd9900" rx="2" ry="2"/>
+<text x="166.9" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>inet_sendmsg (380 samples, 0.18%)</title><rect x="163.9" y="787.0" width="2.2" height="15" fill="#d36f00" rx="2" ry="2"/>
+<text x="166.9" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_sendmsg (371 samples, 0.18%)</title><rect x="164.0" y="771.0" width="2.1" height="15" fill="#fa9600" rx="2" ry="2"/>
+<text x="167.0" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_sendmsg_locked (355 samples, 0.17%)</title><rect x="164.1" y="755.0" width="2.0" height="15" fill="#d97500" rx="2" ry="2"/>
+<text x="167.1" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_push (270 samples, 0.13%)</title><rect x="164.5" y="739.0" width="1.5" height="15" fill="#e78300" rx="2" ry="2"/>
+<text x="167.5" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__tcp_push_pending_frames (267 samples, 0.13%)</title><rect x="164.5" y="723.0" width="1.5" height="15" fill="#d26e00" rx="2" ry="2"/>
+<text x="167.5" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_write_xmit (266 samples, 0.13%)</title><rect x="164.5" y="707.0" width="1.5" height="15" fill="#eb8700" rx="2" ry="2"/>
+<text x="167.5" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_transmit_skb (213 samples, 0.10%)</title><rect x="164.8" y="691.0" width="1.2" height="15" fill="#d47000" rx="2" ry="2"/>
+<text x="167.8" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_queue_xmit (186 samples, 0.09%)</title><rect x="164.9" y="675.0" width="1.0" height="15" fill="#f38f00" rx="2" ry="2"/>
+<text x="167.9" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_out (180 samples, 0.09%)</title><rect x="164.9" y="659.0" width="1.0" height="15" fill="#c15d00" rx="2" ry="2"/>
+<text x="167.9" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_output (180 samples, 0.09%)</title><rect x="164.9" y="643.0" width="1.0" height="15" fill="#c86400" rx="2" ry="2"/>
+<text x="167.9" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_finish_output (178 samples, 0.09%)</title><rect x="164.9" y="627.0" width="1.0" height="15" fill="#c76300" rx="2" ry="2"/>
+<text x="167.9" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.run (175,873 samples, 84.71%)</title><rect x="167.1" y="1379.0" width="999.5" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="170.1" y="1390.0">java/util/concurrent/ThreadPoolExecutor$Worker.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/concurrent/ThreadPoolExecutor.runWorker (175,872 samples, 84.71%)</title><rect x="167.1" y="1363.0" width="999.5" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="170.1" y="1374.0">java/util/concurrent/ThreadPoolExecutor.runWorker</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (175,669 samples, 84.61%)</title><rect x="168.2" y="1347.0" width="998.4" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="171.2" y="1358.0">org/elasticsearch/common/util/concurrent/AbstractRunnable.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/TimedRunnable.doRun (175,663 samples, 84.61%)</title><rect x="168.2" y="1331.0" width="998.4" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="171.2" y="1342.0">org/elasticsearch/common/util/concurrent/TimedRunnable.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (175,662 samples, 84.61%)</title><rect x="168.2" y="1315.0" width="998.4" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="171.2" y="1326.0">org/elasticsearch/common/util/concurrent/AbstractRunnable.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/ThreadContext$ContextPreservingAbstractRunnable.doRun (175,637 samples, 84.59%)</title><rect x="168.3" y="1299.0" width="998.2" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="171.3" y="1310.0">org/elasticsearch/common/util/concurrent/ThreadContext$ContextPreservingAbstractRunnable.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase$1.doRun (366 samples, 0.18%)</title><rect x="168.3" y="1283.0" width="2.0" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="171.3" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase.access$000 (366 samples, 0.18%)</title><rect x="168.3" y="1267.0" width="2.0" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="171.3" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/FetchSearchPhase.innerRun (366 samples, 0.18%)</title><rect x="168.3" y="1251.0" width="2.0" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="171.3" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$3.doRun (175,259 samples, 84.41%)</title><rect x="170.4" y="1283.0" width="996.1" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="173.4" y="1294.0">org/elasticsearch/search/SearchService$3.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$2.onResponse (175,249 samples, 84.41%)</title><rect x="170.5" y="1267.0" width="996.0" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="173.5" y="1278.0">org/elasticsearch/search/SearchService$2.onResponse</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$2.onResponse (175,249 samples, 84.41%)</title><rect x="170.5" y="1251.0" width="996.0" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="173.5" y="1262.0">org/elasticsearch/search/SearchService$2.onResponse</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService$6$1.onResponse (1,005 samples, 0.48%)</title><rect x="170.5" y="1235.0" width="5.7" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="173.5" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/action/search/SearchTransportService$6$1.onResponse (1,005 samples, 0.48%)</title><rect x="170.5" y="1219.0" width="5.7" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="173.5" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TaskTransportChannel.sendResponse (1,005 samples, 0.48%)</title><rect x="170.5" y="1203.0" width="5.7" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="173.5" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransportChannel.sendResponse (858 samples, 0.41%)</title><rect x="170.7" y="1187.0" width="4.9" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="173.7" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransportChannel.sendResponse (858 samples, 0.41%)</title><rect x="170.7" y="1171.0" width="4.9" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="173.7" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.sendResponse (858 samples, 0.41%)</title><rect x="170.7" y="1155.0" width="4.9" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="173.7" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.sendResponse (858 samples, 0.41%)</title><rect x="170.7" y="1139.0" width="4.9" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="173.7" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.buildMessage (318 samples, 0.15%)</title><rect x="171.7" y="1123.0" width="1.8" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="174.7" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QuerySearchResult.writeTo (275 samples, 0.13%)</title><rect x="171.8" y="1107.0" width="1.6" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="174.8" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QuerySearchResult.writeToNoId (271 samples, 0.13%)</title><rect x="171.8" y="1091.0" width="1.6" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="174.8" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/lucene/Lucene.writeTopDocs (237 samples, 0.11%)</title><rect x="172.0" y="1075.0" width="1.3" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="175.0" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/lucene/Lucene.writeFieldDoc (200 samples, 0.10%)</title><rect x="172.1" y="1059.0" width="1.1" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="175.1" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.internalSendMessage (369 samples, 0.18%)</title><rect x="173.5" y="1123.0" width="2.1" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="176.5" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/NettyTcpChannel.sendMessage (369 samples, 0.18%)</title><rect x="173.5" y="1107.0" width="2.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="176.5" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel.writeAndFlush (320 samples, 0.15%)</title><rect x="173.5" y="1091.0" width="1.9" height="15" fill="#6afc6a" rx="2" ry="2"/>
+<text x="176.5" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.writeAndFlush (320 samples, 0.15%)</title><rect x="173.5" y="1075.0" width="1.9" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="176.5" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.writeAndFlush (319 samples, 0.15%)</title><rect x="173.5" y="1059.0" width="1.9" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="176.5" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (316 samples, 0.15%)</title><rect x="173.6" y="1043.0" width="1.8" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="176.6" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.safeExecute (233 samples, 0.11%)</title><rect x="174.0" y="1027.0" width="1.4" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="177.0" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/SingleThreadEventExecutor.execute (233 samples, 0.11%)</title><rect x="174.0" y="1011.0" width="1.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="177.0" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.wakeup (233 samples, 0.11%)</title><rect x="174.0" y="995.0" width="1.4" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="177.0" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollSelectorImpl.wakeup (233 samples, 0.11%)</title><rect x="174.0" y="979.0" width="1.4" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="177.0" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollArrayWrapper.interrupt (233 samples, 0.11%)</title><rect x="174.0" y="963.0" width="1.4" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="177.0" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/EPollArrayWrapper.interrupt (233 samples, 0.11%)</title><rect x="174.0" y="947.0" width="1.4" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="177.0" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>[unknown] (224 samples, 0.11%)</title><rect x="174.1" y="931.0" width="1.3" height="15" fill="#d13f3f" rx="2" ry="2"/>
+<text x="177.1" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__write (223 samples, 0.11%)</title><rect x="174.1" y="915.0" width="1.3" height="15" fill="#e96262" rx="2" ry="2"/>
+<text x="177.1" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>entry_SYSCALL_64_after_hwframe (219 samples, 0.11%)</title><rect x="174.1" y="899.0" width="1.3" height="15" fill="#fe9a00" rx="2" ry="2"/>
+<text x="177.1" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_syscall_64 (216 samples, 0.10%)</title><rect x="174.1" y="883.0" width="1.2" height="15" fill="#df7b00" rx="2" ry="2"/>
+<text x="177.1" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sys_write (179 samples, 0.09%)</title><rect x="174.3" y="867.0" width="1.0" height="15" fill="#ca6600" rx="2" ry="2"/>
+<text x="177.3" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.executeQueryPhase (174,244 samples, 83.92%)</title><rect x="176.2" y="1235.0" width="990.3" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="179.2" y="1246.0">org/elasticsearch/search/SearchService.executeQueryPhase</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.createAndPutContext (897 samples, 0.43%)</title><rect x="176.7" y="1219.0" width="5.1" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="179.7" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.createContext (860 samples, 0.41%)</title><rect x="176.9" y="1203.0" width="4.9" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="179.9" y="1214.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.createSearchContext (632 samples, 0.30%)</title><rect x="176.9" y="1187.0" width="3.6" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="179.9" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.createSearchContext (632 samples, 0.30%)</title><rect x="176.9" y="1171.0" width="3.6" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="179.9" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/shard/IndexShard.acquireSearcher (184 samples, 0.09%)</title><rect x="177.5" y="1155.0" width="1.1" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="180.5" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/shard/IndexShard.acquireSearcher (183 samples, 0.09%)</title><rect x="177.5" y="1139.0" width="1.1" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="180.5" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/DefaultSearchContext.&lt;init&gt; (279 samples, 0.13%)</title><rect x="178.6" y="1155.0" width="1.6" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="181.6" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/IndexService.newQueryShardContext (190 samples, 0.09%)</title><rect x="178.7" y="1139.0" width="1.1" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="181.7" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/query/QueryShardContext.&lt;init&gt; (180 samples, 0.09%)</title><rect x="178.8" y="1123.0" width="1.0" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="181.8" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.parseSource (213 samples, 0.10%)</title><rect x="180.5" y="1187.0" width="1.2" height="15" fill="#4de04d" rx="2" ry="2"/>
+<text x="183.5" y="1198.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.loadOrExecuteQueryPhase (173,247 samples, 83.44%)</title><rect x="181.8" y="1219.0" width="984.7" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="184.8" y="1230.0">org/elasticsearch/search/SearchService.loadOrExecuteQueryPhase</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QueryPhase.execute (173,247 samples, 83.44%)</title><rect x="181.8" y="1203.0" width="984.7" height="15" fill="#4cdf4c" rx="2" ry="2"/>
+<text x="184.8" y="1214.0">org/elasticsearch/search/query/QueryPhase.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QueryPhase.execute (173,236 samples, 83.44%)</title><rect x="181.9" y="1187.0" width="984.6" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="184.9" y="1198.0">org/elasticsearch/search/query/QueryPhase.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/IndexSearcher.search (172,462 samples, 83.06%)</title><rect x="182.2" y="1171.0" width="980.1" height="15" fill="#66f866" rx="2" ry="2"/>
+<text x="185.2" y="1182.0">org/apache/lucene/search/IndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/internal/ContextIndexSearcher.search (172,449 samples, 83.06%)</title><rect x="182.2" y="1155.0" width="980.1" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="185.2" y="1166.0">org/elasticsearch/search/internal/ContextIndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/IndexSearcher.search (172,449 samples, 83.06%)</title><rect x="182.2" y="1139.0" width="980.1" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="185.2" y="1150.0">org/apache/lucene/search/IndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/BulkScorer.score (172,196 samples, 82.94%)</title><rect x="182.6" y="1123.0" width="978.7" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="185.6" y="1134.0">org/apache/lucene/search/BulkScorer.score</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/MatchAllDocsQuery$1$1.score (172,196 samples, 82.94%)</title><rect x="182.6" y="1107.0" width="978.7" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="185.6" y="1118.0">org/apache/lucene/search/MatchAllDocsQuery$1$1.score</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector$1.collect (172,022 samples, 82.85%)</title><rect x="183.6" y="1091.0" width="977.6" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="186.6" y="1102.0">org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector$1.collect</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.compareBottom (168,746 samples, 81.28%)</title><rect x="185.6" y="1075.0" width="959.0" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="188.6" y="1086.0">org/apache/lucene/search/FieldComparator$DoubleComparator.compareBottom</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Double.compare (427 samples, 0.21%)</title><rect x="185.7" y="1059.0" width="2.5" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="188.7" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc (168,293 samples, 81.06%)</title><rect x="188.2" y="1059.0" width="956.4" height="15" fill="#3fd33f" rx="2" ry="2"/>
+<text x="191.2" y="1070.0">org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact (167,747 samples, 80.79%)</title><rect x="190.8" y="1043.0" width="953.4" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="193.8" y="1054.0">org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/FieldData$14.advanceExact (167,645 samples, 80.74%)</title><rect x="191.4" y="1027.0" width="952.8" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="194.4" y="1038.0">org/elasticsearch/index/fielddata/FieldData$14.advanceExact</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/sort/ScriptSortBuilder$2$1.advanceExact (1,414 samples, 0.68%)</title><rect x="192.5" y="1011.0" width="8.0" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="195.5" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/script/SearchScript.setDocument (1,381 samples, 0.67%)</title><rect x="192.7" y="995.0" width="7.8" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="195.7" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/lookup/LeafSearchLookup.setDocument (1,249 samples, 0.60%)</title><rect x="193.4" y="979.0" width="7.1" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="196.4" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/lookup/LeafFieldsLookup.setDocument (501 samples, 0.24%)</title><rect x="196.0" y="963.0" width="2.8" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="199.0" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/lookup/LeafFieldsLookup.clearCache (455 samples, 0.22%)</title><rect x="196.2" y="947.0" width="2.6" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="199.2" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap$EntrySet.iterator (203 samples, 0.10%)</title><rect x="197.3" y="931.0" width="1.2" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="200.3" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap$EntryIterator.&lt;init&gt; (180 samples, 0.09%)</title><rect x="197.5" y="915.0" width="1.0" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="200.5" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap$HashIterator.&lt;init&gt; (180 samples, 0.09%)</title><rect x="197.5" y="899.0" width="1.0" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="200.5" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/lookup/SourceLookup.setSegmentAndDocument (285 samples, 0.14%)</title><rect x="198.8" y="963.0" width="1.6" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="201.8" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue (166,040 samples, 79.97%)</title><rect x="200.5" y="1011.0" width="943.7" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="203.5" y="1022.0">org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.runAsDouble (166,019 samples, 79.96%)</title><rect x="200.6" y="995.0" width="943.6" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="203.6" y="1006.0">org/elasticsearch/painless/ScriptImpl.runAsDouble</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.run (164,920 samples, 79.43%)</title><rect x="206.8" y="979.0" width="937.3" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="209.8" y="990.0">org/elasticsearch/painless/ScriptImpl.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/PainlessScript$Script.execute (164,233 samples, 79.10%)</title><rect x="209.8" y="963.0" width="933.4" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="212.8" y="974.0">org/elasticsearch/painless/PainlessScript$Script.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>apic_timer_interrupt (319 samples, 0.15%)</title><rect x="1126.0" y="947.0" width="1.8" height="15" fill="#ef8b00" rx="2" ry="2"/>
+<text x="1129.0" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>smp_apic_timer_interrupt (319 samples, 0.15%)</title><rect x="1126.0" y="931.0" width="1.8" height="15" fill="#d57100" rx="2" ry="2"/>
+<text x="1129.0" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irq_exit (319 samples, 0.15%)</title><rect x="1126.0" y="915.0" width="1.8" height="15" fill="#ce6a00" rx="2" ry="2"/>
+<text x="1129.0" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__softirqentry_text_start (315 samples, 0.15%)</title><rect x="1126.0" y="899.0" width="1.8" height="15" fill="#cb6700" rx="2" ry="2"/>
+<text x="1129.0" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>run_timer_softirq (181 samples, 0.09%)</title><rect x="1126.7" y="883.0" width="1.1" height="15" fill="#e37f00" rx="2" ry="2"/>
+<text x="1129.7" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ret_from_intr (1,505 samples, 0.72%)</title><rect x="1128.6" y="947.0" width="8.5" height="15" fill="#ea8600" rx="2" ry="2"/>
+<text x="1131.6" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>do_IRQ (1,505 samples, 0.72%)</title><rect x="1128.6" y="931.0" width="8.5" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="1131.6" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irq_exit (1,505 samples, 0.72%)</title><rect x="1128.6" y="915.0" width="8.5" height="15" fill="#db7700" rx="2" ry="2"/>
+<text x="1131.6" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__softirqentry_text_start (1,503 samples, 0.72%)</title><rect x="1128.6" y="899.0" width="8.5" height="15" fill="#bf5b00" rx="2" ry="2"/>
+<text x="1131.6" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>net_rx_action (1,333 samples, 0.64%)</title><rect x="1129.5" y="883.0" width="7.6" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="1132.5" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>virtnet_poll	[virtio_net] (1,299 samples, 0.63%)</title><rect x="1129.7" y="867.0" width="7.4" height="15" fill="#f38f00" rx="2" ry="2"/>
+<text x="1132.7" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>receive_buf	[virtio_net] (815 samples, 0.39%)</title><rect x="1129.8" y="851.0" width="4.6" height="15" fill="#d26e00" rx="2" ry="2"/>
+<text x="1132.8" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>napi_gro_receive (589 samples, 0.28%)</title><rect x="1130.4" y="835.0" width="3.4" height="15" fill="#d67200" rx="2" ry="2"/>
+<text x="1133.4" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>netif_receive_skb_internal (415 samples, 0.20%)</title><rect x="1131.4" y="819.0" width="2.4" height="15" fill="#f38f00" rx="2" ry="2"/>
+<text x="1134.4" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__netif_receive_skb (414 samples, 0.20%)</title><rect x="1131.4" y="803.0" width="2.4" height="15" fill="#da7600" rx="2" ry="2"/>
+<text x="1134.4" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__netif_receive_skb_core (412 samples, 0.20%)</title><rect x="1131.4" y="787.0" width="2.4" height="15" fill="#e58100" rx="2" ry="2"/>
+<text x="1134.4" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_rcv (404 samples, 0.19%)</title><rect x="1131.5" y="771.0" width="2.3" height="15" fill="#f89400" rx="2" ry="2"/>
+<text x="1134.5" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_rcv_finish (403 samples, 0.19%)</title><rect x="1131.5" y="755.0" width="2.3" height="15" fill="#e88400" rx="2" ry="2"/>
+<text x="1134.5" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_deliver (377 samples, 0.18%)</title><rect x="1131.5" y="739.0" width="2.1" height="15" fill="#bf5b00" rx="2" ry="2"/>
+<text x="1134.5" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_deliver_finish (375 samples, 0.18%)</title><rect x="1131.5" y="723.0" width="2.1" height="15" fill="#c66200" rx="2" ry="2"/>
+<text x="1134.5" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_v4_rcv (374 samples, 0.18%)</title><rect x="1131.5" y="707.0" width="2.1" height="15" fill="#dd7900" rx="2" ry="2"/>
+<text x="1134.5" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_v4_do_rcv (355 samples, 0.17%)</title><rect x="1131.6" y="691.0" width="2.0" height="15" fill="#da7600" rx="2" ry="2"/>
+<text x="1134.6" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_rcv_established (352 samples, 0.17%)</title><rect x="1131.6" y="675.0" width="2.0" height="15" fill="#f79300" rx="2" ry="2"/>
+<text x="1134.6" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>virtqueue_napi_complete	[virtio_net] (356 samples, 0.17%)</title><rect x="1135.0" y="851.0" width="2.1" height="15" fill="#de7a00" rx="2" ry="2"/>
+<text x="1138.0" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>napi_complete_done (352 samples, 0.17%)</title><rect x="1135.0" y="835.0" width="2.0" height="15" fill="#d36f00" rx="2" ry="2"/>
+<text x="1138.0" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>napi_gro_flush (348 samples, 0.17%)</title><rect x="1135.1" y="819.0" width="1.9" height="15" fill="#d06c00" rx="2" ry="2"/>
+<text x="1138.1" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>napi_gro_complete (344 samples, 0.17%)</title><rect x="1135.1" y="803.0" width="1.9" height="15" fill="#e27e00" rx="2" ry="2"/>
+<text x="1138.1" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>netif_receive_skb_internal (340 samples, 0.16%)</title><rect x="1135.1" y="787.0" width="1.9" height="15" fill="#f79300" rx="2" ry="2"/>
+<text x="1138.1" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__netif_receive_skb (337 samples, 0.16%)</title><rect x="1135.1" y="771.0" width="1.9" height="15" fill="#e17d00" rx="2" ry="2"/>
+<text x="1138.1" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__netif_receive_skb_core (331 samples, 0.16%)</title><rect x="1135.1" y="755.0" width="1.9" height="15" fill="#c15d00" rx="2" ry="2"/>
+<text x="1138.1" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_rcv (313 samples, 0.15%)</title><rect x="1135.2" y="739.0" width="1.8" height="15" fill="#f89400" rx="2" ry="2"/>
+<text x="1138.2" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_rcv_finish (304 samples, 0.15%)</title><rect x="1135.2" y="723.0" width="1.8" height="15" fill="#d16d00" rx="2" ry="2"/>
+<text x="1138.2" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_deliver (268 samples, 0.13%)</title><rect x="1135.3" y="707.0" width="1.5" height="15" fill="#d97500" rx="2" ry="2"/>
+<text x="1138.3" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>ip_local_deliver_finish (262 samples, 0.13%)</title><rect x="1135.3" y="691.0" width="1.5" height="15" fill="#c86400" rx="2" ry="2"/>
+<text x="1138.3" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_v4_rcv (254 samples, 0.12%)</title><rect x="1135.3" y="675.0" width="1.5" height="15" fill="#df7b00" rx="2" ry="2"/>
+<text x="1138.3" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_v4_do_rcv (208 samples, 0.10%)</title><rect x="1135.6" y="659.0" width="1.1" height="15" fill="#be5a00" rx="2" ry="2"/>
+<text x="1138.6" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>tcp_rcv_established (205 samples, 0.10%)</title><rect x="1135.6" y="643.0" width="1.1" height="15" fill="#f59100" rx="2" ry="2"/>
+<text x="1138.6" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>swapgs_restore_regs_and_return_to_usermode (1,071 samples, 0.52%)</title><rect x="1137.1" y="947.0" width="6.1" height="15" fill="#f08c00" rx="2" ry="2"/>
+<text x="1140.1" y="958.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>prepare_exit_to_usermode (1,071 samples, 0.52%)</title><rect x="1137.1" y="931.0" width="6.1" height="15" fill="#db7700" rx="2" ry="2"/>
+<text x="1140.1" y="942.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>exit_to_usermode_loop (1,068 samples, 0.51%)</title><rect x="1137.1" y="915.0" width="6.1" height="15" fill="#f69200" rx="2" ry="2"/>
+<text x="1140.1" y="926.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>schedule (253 samples, 0.12%)</title><rect x="1141.8" y="899.0" width="1.4" height="15" fill="#c05c00" rx="2" ry="2"/>
+<text x="1144.8" y="910.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__schedule (251 samples, 0.12%)</title><rect x="1141.8" y="883.0" width="1.4" height="15" fill="#cf6b00" rx="2" ry="2"/>
+<text x="1144.8" y="894.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>finish_task_switch (237 samples, 0.11%)</title><rect x="1141.9" y="867.0" width="1.3" height="15" fill="#ca6600" rx="2" ry="2"/>
+<text x="1144.9" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.copy (2,784 samples, 1.34%)</title><rect x="1144.6" y="1075.0" width="15.9" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="1147.6" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc (2,781 samples, 1.34%)</title><rect x="1144.7" y="1059.0" width="15.8" height="15" fill="#37cc37" rx="2" ry="2"/>
+<text x="1147.7" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact (2,780 samples, 1.34%)</title><rect x="1144.7" y="1043.0" width="15.8" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="1147.7" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/FieldData$14.advanceExact (2,778 samples, 1.34%)</title><rect x="1144.7" y="1027.0" width="15.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="1147.7" y="1038.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue (2,748 samples, 1.32%)</title><rect x="1144.8" y="1011.0" width="15.7" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="1147.8" y="1022.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.runAsDouble (2,748 samples, 1.32%)</title><rect x="1144.8" y="995.0" width="15.7" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="1147.8" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.run (2,730 samples, 1.31%)</title><rect x="1144.9" y="979.0" width="15.6" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="1147.9" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/PainlessScript$Script.execute (2,717 samples, 1.31%)</title><rect x="1145.0" y="963.0" width="15.5" height="15" fill="#38ce38" rx="2" ry="2"/>
+<text x="1148.0" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/CancellableCollector.getLeafCollector (181 samples, 0.09%)</title><rect x="1161.3" y="1123.0" width="1.0" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="1164.3" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FilterCollector.getLeafCollector (178 samples, 0.09%)</title><rect x="1161.3" y="1107.0" width="1.0" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="1164.3" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector.getLeafCollector (178 samples, 0.09%)</title><rect x="1161.3" y="1091.0" width="1.0" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="1164.3" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/TopDocsCollectorContext$SimpleTopDocsCollectorContext.postProcess (612 samples, 0.29%)</title><rect x="1162.5" y="1171.0" width="3.5" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="1165.5" y="1182.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/TopDocsCollectorContext$SimpleTopDocsCollectorContext$$Lambda$3322/542827416.get (602 samples, 0.29%)</title><rect x="1162.6" y="1155.0" width="3.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="1165.6" y="1166.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector.topDocs (602 samples, 0.29%)</title><rect x="1162.6" y="1139.0" width="3.4" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="1165.6" y="1150.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector.topDocs (602 samples, 0.29%)</title><rect x="1162.6" y="1123.0" width="3.4" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="1165.6" y="1134.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopDocsCollector.topDocs (602 samples, 0.29%)</title><rect x="1162.6" y="1107.0" width="3.4" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="1165.6" y="1118.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopDocsCollector.topDocs (595 samples, 0.29%)</title><rect x="1162.6" y="1091.0" width="3.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="1165.6" y="1102.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector.populateResults (563 samples, 0.27%)</title><rect x="1162.8" y="1075.0" width="3.2" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="1165.8" y="1086.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/util/PriorityQueue.pop (358 samples, 0.17%)</title><rect x="1164.0" y="1059.0" width="2.0" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="1167.0" y="1070.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/util/PriorityQueue.downHeap (344 samples, 0.17%)</title><rect x="1164.0" y="1043.0" width="2.0" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="1167.0" y="1054.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>start_thread (3,854 samples, 1.86%)</title><rect x="1168.0" y="1395.0" width="21.9" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="1171.0" y="1406.0">s..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,854 samples, 1.86%)</title><rect x="1168.0" y="1379.0" width="21.9" height="15" fill="#f27070" rx="2" ry="2"/>
+<text x="1171.0" y="1390.0">/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,854 samples, 1.86%)</title><rect x="1168.0" y="1363.0" width="21.9" height="15" fill="#eb6565" rx="2" ry="2"/>
+<text x="1171.0" y="1374.0">/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,854 samples, 1.86%)</title><rect x="1168.0" y="1347.0" width="21.9" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="1171.0" y="1358.0">/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,849 samples, 1.85%)</title><rect x="1168.0" y="1331.0" width="21.9" height="15" fill="#ea6464" rx="2" ry="2"/>
+<text x="1171.0" y="1342.0">/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,809 samples, 1.83%)</title><rect x="1168.2" y="1315.0" width="21.6" height="15" fill="#df5353" rx="2" ry="2"/>
+<text x="1171.2" y="1326.0">/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,448 samples, 1.66%)</title><rect x="1170.2" y="1299.0" width="19.6" height="15" fill="#f27070" rx="2" ry="2"/>
+<text x="1173.2" y="1310.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,385 samples, 1.63%)</title><rect x="1170.5" y="1283.0" width="19.3" height="15" fill="#e35a5a" rx="2" ry="2"/>
+<text x="1173.5" y="1294.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,247 samples, 1.56%)</title><rect x="1171.3" y="1267.0" width="18.5" height="15" fill="#e15656" rx="2" ry="2"/>
+<text x="1174.3" y="1278.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,200 samples, 1.54%)</title><rect x="1171.6" y="1251.0" width="18.1" height="15" fill="#ca3535" rx="2" ry="2"/>
+<text x="1174.6" y="1262.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (3,071 samples, 1.48%)</title><rect x="1172.3" y="1235.0" width="17.4" height="15" fill="#ee6a6a" rx="2" ry="2"/>
+<text x="1175.3" y="1246.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (1,039 samples, 0.50%)</title><rect x="1183.7" y="1219.0" width="5.9" height="15" fill="#f87979" rx="2" ry="2"/>
+<text x="1186.7" y="1230.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (210 samples, 0.10%)</title><rect x="1188.3" y="1203.0" width="1.2" height="15" fill="#cf3c3c" rx="2" ry="2"/>
+<text x="1191.3" y="1214.0"></text>
+</g>
+</svg>

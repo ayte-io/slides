@@ -50,3 +50,11 @@ end
 cookbook_file '/usr/local/bin/perf.service' do
   mode '0755'
 end
+
+sysctl 'kernel.perf_event_paranoid' do
+  value 1
+end
+
+sysctl 'kernel.kptr_restrict' do
+  value 0
+end

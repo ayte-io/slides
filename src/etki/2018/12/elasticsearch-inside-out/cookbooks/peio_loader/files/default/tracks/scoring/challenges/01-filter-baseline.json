@@ -9,11 +9,18 @@
       "operation": {
         "operation-type": "search",
         "body": {
-          "filter": {
-            "match": {
-              "title": "king"
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "match": {
+                    "text": "king"
+                  }
+                }
+              ]
             }
-          }
+          },
+          "size": 100
         }
       }
     }

@@ -1,0 +1,651 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="614" onload="init(evt)" viewBox="0 0 1200 614" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:black; }
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text x="600" y="24" text-anchor="middle" style="font-size:17px">Flame Graph</text>
+<text x="10" y="597" id="details"> </text>
+<text x="10" y="24" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer">Reset Zoom</text>
+<text x="1090" y="24" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer">Search</text>
+<text x="1090" y="597" id="matched"> </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (238,913 samples, 100.00%)</title><rect x="10.0" y="563.0" width="1180.0" height="15" fill="#e15757" rx="2" ry="2"/>
+<text x="13.0" y="574.0">all</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.run (238,453 samples, 99.81%)</title><rect x="10.1" y="547.0" width="1177.8" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="13.1" y="558.0">java/lang/Thread.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/SingleThreadEventExecutor$5.run (665 samples, 0.28%)</title><rect x="10.1" y="531.0" width="3.3" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="13.1" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.run (664 samples, 0.28%)</title><rect x="10.1" y="515.0" width="3.3" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="13.1" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeys (487 samples, 0.20%)</title><rect x="10.1" y="499.0" width="2.4" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="13.1" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeysPlain (487 samples, 0.20%)</title><rect x="10.1" y="483.0" width="2.4" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="13.1" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKey (484 samples, 0.20%)</title><rect x="10.1" y="467.0" width="2.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="13.1" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel$NioByteUnsafe.read (484 samples, 0.20%)</title><rect x="10.1" y="451.0" width="2.4" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="13.1" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.fireChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="435.0" width="1.8" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="13.2" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="419.0" width="1.8" height="15" fill="#4cdf4c" rx="2" ry="2"/>
+<text x="13.2" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="403.0" width="1.8" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="13.2" y="414.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.channelRead (384 samples, 0.16%)</title><rect x="10.2" y="387.0" width="1.8" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="13.2" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="371.0" width="1.8" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="13.2" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="355.0" width="1.8" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="13.2" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (384 samples, 0.16%)</title><rect x="10.2" y="339.0" width="1.8" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="13.2" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/logging/LoggingHandler.channelRead (367 samples, 0.15%)</title><rect x="10.2" y="323.0" width="1.8" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="13.2" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (364 samples, 0.15%)</title><rect x="10.2" y="307.0" width="1.8" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="13.2" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (364 samples, 0.15%)</title><rect x="10.2" y="291.0" width="1.8" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="13.2" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (364 samples, 0.15%)</title><rect x="10.2" y="275.0" width="1.8" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="13.2" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.channelRead (364 samples, 0.15%)</title><rect x="10.2" y="259.0" width="1.8" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="13.2" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.callDecode (337 samples, 0.14%)</title><rect x="10.4" y="243.0" width="1.6" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="13.4" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (284 samples, 0.12%)</title><rect x="10.6" y="227.0" width="1.4" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="13.6" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (284 samples, 0.12%)</title><rect x="10.6" y="211.0" width="1.4" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="13.6" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (284 samples, 0.12%)</title><rect x="10.6" y="195.0" width="1.4" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="13.6" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (284 samples, 0.12%)</title><rect x="10.6" y="179.0" width="1.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="13.6" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (283 samples, 0.12%)</title><rect x="10.6" y="163.0" width="1.4" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="13.6" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/netty4/Netty4MessageChannelHandler.channelRead (283 samples, 0.12%)</title><rect x="10.6" y="147.0" width="1.4" height="15" fill="#34c934" rx="2" ry="2"/>
+<text x="13.6" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.messageReceived (283 samples, 0.12%)</title><rect x="10.6" y="131.0" width="1.4" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="13.6" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/transport/TcpTransport.handleResponse (240 samples, 0.10%)</title><rect x="10.8" y="115.0" width="1.2" height="15" fill="#66f866" rx="2" ry="2"/>
+<text x="13.8" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.run (237,787 samples, 99.53%)</title><rect x="13.4" y="531.0" width="1174.5" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="16.4" y="542.0">java/util/concurrent/ThreadPoolExecutor$Worker.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/concurrent/ThreadPoolExecutor.runWorker (237,787 samples, 99.53%)</title><rect x="13.4" y="515.0" width="1174.5" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="16.4" y="526.0">java/util/concurrent/ThreadPoolExecutor.runWorker</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (237,765 samples, 99.52%)</title><rect x="13.5" y="499.0" width="1174.4" height="15" fill="#46db46" rx="2" ry="2"/>
+<text x="16.5" y="510.0">org/elasticsearch/common/util/concurrent/AbstractRunnable.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/TimedRunnable.doRun (237,765 samples, 99.52%)</title><rect x="13.5" y="483.0" width="1174.4" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="16.5" y="494.0">org/elasticsearch/common/util/concurrent/TimedRunnable.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/AbstractRunnable.run (237,765 samples, 99.52%)</title><rect x="13.5" y="467.0" width="1174.4" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="16.5" y="478.0">org/elasticsearch/common/util/concurrent/AbstractRunnable.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/common/util/concurrent/ThreadContext$ContextPreservingAbstractRunnable.doRun (237,765 samples, 99.52%)</title><rect x="13.5" y="451.0" width="1174.4" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="16.5" y="462.0">org/elasticsearch/common/util/concurrent/ThreadContext$ContextPreservingAbstractRunnable.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$3.doRun (237,753 samples, 99.51%)</title><rect x="13.6" y="435.0" width="1174.3" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="16.6" y="446.0">org/elasticsearch/search/SearchService$3.doRun</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$2.onResponse (237,753 samples, 99.51%)</title><rect x="13.6" y="419.0" width="1174.3" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="16.6" y="430.0">org/elasticsearch/search/SearchService$2.onResponse</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService$2.onResponse (237,752 samples, 99.51%)</title><rect x="13.6" y="403.0" width="1174.3" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="16.6" y="414.0">org/elasticsearch/search/SearchService$2.onResponse</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.executeQueryPhase (237,733 samples, 99.51%)</title><rect x="13.7" y="387.0" width="1174.2" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="16.7" y="398.0">org/elasticsearch/search/SearchService.executeQueryPhase</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/SearchService.loadOrExecuteQueryPhase (237,708 samples, 99.50%)</title><rect x="13.8" y="371.0" width="1174.1" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="16.8" y="382.0">org/elasticsearch/search/SearchService.loadOrExecuteQueryPhase</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QueryPhase.execute (237,708 samples, 99.50%)</title><rect x="13.8" y="355.0" width="1174.1" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="16.8" y="366.0">org/elasticsearch/search/query/QueryPhase.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/query/QueryPhase.execute (237,708 samples, 99.50%)</title><rect x="13.8" y="339.0" width="1174.1" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="16.8" y="350.0">org/elasticsearch/search/query/QueryPhase.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/IndexSearcher.search (237,696 samples, 99.49%)</title><rect x="13.8" y="323.0" width="1174.0" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="16.8" y="334.0">org/apache/lucene/search/IndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/internal/ContextIndexSearcher.search (237,696 samples, 99.49%)</title><rect x="13.8" y="307.0" width="1174.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="16.8" y="318.0">org/elasticsearch/search/internal/ContextIndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/IndexSearcher.search (237,696 samples, 99.49%)</title><rect x="13.8" y="291.0" width="1174.0" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="16.8" y="302.0">org/apache/lucene/search/IndexSearcher.search</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/BulkScorer.score (237,687 samples, 99.49%)</title><rect x="13.8" y="275.0" width="1173.9" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="16.8" y="286.0">org/apache/lucene/search/BulkScorer.score</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/MatchAllDocsQuery$1$1.score (237,687 samples, 99.49%)</title><rect x="13.8" y="259.0" width="1173.9" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="16.8" y="270.0">org/apache/lucene/search/MatchAllDocsQuery$1$1.score</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector$1.collect (237,674 samples, 99.48%)</title><rect x="13.9" y="243.0" width="1173.8" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="16.9" y="254.0">org/apache/lucene/search/TopFieldCollector$SimpleFieldCollector$1.collect</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.compareBottom (234,089 samples, 97.98%)</title><rect x="14.0" y="227.0" width="1156.2" height="15" fill="#5ef15e" rx="2" ry="2"/>
+<text x="17.0" y="238.0">org/apache/lucene/search/FieldComparator$DoubleComparator.compareBottom</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc (234,085 samples, 97.98%)</title><rect x="14.0" y="211.0" width="1156.2" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="17.0" y="222.0">org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact (234,039 samples, 97.96%)</title><rect x="14.2" y="195.0" width="1155.9" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="17.2" y="206.0">org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/FieldData$14.advanceExact (234,029 samples, 97.96%)</title><rect x="14.2" y="179.0" width="1155.9" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="17.2" y="190.0">org/elasticsearch/index/fielddata/FieldData$14.advanceExact</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue (233,929 samples, 97.91%)</title><rect x="14.7" y="163.0" width="1155.4" height="15" fill="#3ad03a" rx="2" ry="2"/>
+<text x="17.7" y="174.0">org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.runAsDouble (233,929 samples, 97.91%)</title><rect x="14.7" y="147.0" width="1155.4" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="17.7" y="158.0">org/elasticsearch/painless/ScriptImpl.runAsDouble</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.run (233,847 samples, 97.88%)</title><rect x="15.1" y="131.0" width="1155.0" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="18.1" y="142.0">org/elasticsearch/painless/ScriptImpl.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/PainlessScript$Script.execute (233,762 samples, 97.84%)</title><rect x="15.5" y="115.0" width="1154.6" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="18.5" y="126.0">org/elasticsearch/painless/PainlessScript$Script.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>apic_timer_interrupt (306 samples, 0.13%)</title><rect x="1167.9" y="99.0" width="1.5" height="15" fill="#ca6600" rx="2" ry="2"/>
+<text x="1170.9" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>smp_apic_timer_interrupt (306 samples, 0.13%)</title><rect x="1167.9" y="83.0" width="1.5" height="15" fill="#dd7900" rx="2" ry="2"/>
+<text x="1170.9" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>irq_exit (306 samples, 0.13%)</title><rect x="1167.9" y="67.0" width="1.5" height="15" fill="#f89400" rx="2" ry="2"/>
+<text x="1170.9" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>__softirqentry_text_start (299 samples, 0.13%)</title><rect x="1167.9" y="51.0" width="1.5" height="15" fill="#c25e00" rx="2" ry="2"/>
+<text x="1170.9" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>run_timer_softirq (213 samples, 0.09%)</title><rect x="1168.3" y="35.0" width="1.1" height="15" fill="#ca6600" rx="2" ry="2"/>
+<text x="1171.3" y="46.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.copy (3,547 samples, 1.48%)</title><rect x="1170.2" y="227.0" width="17.5" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="1173.2" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/apache/lucene/search/FieldComparator$DoubleComparator.getValueForDoc (3,547 samples, 1.48%)</title><rect x="1170.2" y="211.0" width="17.5" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="1173.2" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/NumericDoubleValues$1.advanceExact (3,547 samples, 1.48%)</title><rect x="1170.2" y="195.0" width="17.5" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1173.2" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/index/fielddata/FieldData$14.advanceExact (3,547 samples, 1.48%)</title><rect x="1170.2" y="179.0" width="17.5" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="1173.2" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/search/sort/ScriptSortBuilder$2$1.doubleValue (3,542 samples, 1.48%)</title><rect x="1170.2" y="163.0" width="17.5" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1173.2" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.runAsDouble (3,542 samples, 1.48%)</title><rect x="1170.2" y="147.0" width="17.5" height="15" fill="#48dd48" rx="2" ry="2"/>
+<text x="1173.2" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/ScriptImpl.run (3,542 samples, 1.48%)</title><rect x="1170.2" y="131.0" width="17.5" height="15" fill="#52e652" rx="2" ry="2"/>
+<text x="1173.2" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>org/elasticsearch/painless/PainlessScript$Script.execute (3,542 samples, 1.48%)</title><rect x="1170.2" y="115.0" width="17.5" height="15" fill="#3cd23c" rx="2" ry="2"/>
+<text x="1173.2" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>start_thread (417 samples, 0.17%)</title><rect x="1187.9" y="547.0" width="2.1" height="15" fill="#df5353" rx="2" ry="2"/>
+<text x="1190.9" y="558.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (417 samples, 0.17%)</title><rect x="1187.9" y="531.0" width="2.1" height="15" fill="#eb6666" rx="2" ry="2"/>
+<text x="1190.9" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (417 samples, 0.17%)</title><rect x="1187.9" y="515.0" width="2.1" height="15" fill="#de5252" rx="2" ry="2"/>
+<text x="1190.9" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (415 samples, 0.17%)</title><rect x="1188.0" y="499.0" width="2.0" height="15" fill="#eb6565" rx="2" ry="2"/>
+<text x="1191.0" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (410 samples, 0.17%)</title><rect x="1188.0" y="483.0" width="2.0" height="15" fill="#f16d6d" rx="2" ry="2"/>
+<text x="1191.0" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (402 samples, 0.17%)</title><rect x="1188.0" y="467.0" width="2.0" height="15" fill="#db4f4f" rx="2" ry="2"/>
+<text x="1191.0" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (398 samples, 0.17%)</title><rect x="1188.0" y="451.0" width="2.0" height="15" fill="#e05555" rx="2" ry="2"/>
+<text x="1191.0" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (386 samples, 0.16%)</title><rect x="1188.1" y="435.0" width="1.9" height="15" fill="#da4c4c" rx="2" ry="2"/>
+<text x="1191.1" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (377 samples, 0.16%)</title><rect x="1188.1" y="419.0" width="1.9" height="15" fill="#d44444" rx="2" ry="2"/>
+<text x="1191.1" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (377 samples, 0.16%)</title><rect x="1188.1" y="403.0" width="1.9" height="15" fill="#ce3b3b" rx="2" ry="2"/>
+<text x="1191.1" y="414.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server/libjvm.so (377 samples, 0.16%)</title><rect x="1188.1" y="387.0" width="1.9" height="15" fill="#cc3838" rx="2" ry="2"/>
+<text x="1191.1" y="398.0"></text>
+</g>
+</svg>

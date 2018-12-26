@@ -1,8 +1,0 @@
-{
-  "name": "index.ingest",
-  "operation": {
-    "operation-type": "bulk",
-    "bulk-size": 5000
-  },
-  "clients": 8
-}

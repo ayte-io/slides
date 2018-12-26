@@ -1,0 +1,9 @@
+{% import "rally.helpers" as rally %}
+{
+  "version": 2,
+  "description": "dfs_query_then_fetch",
+  "indices": [{"name": "wiki-1"}],
+  "challenges": [
+    {{ rally.collect(parts="challenges/*.json") }}
+  ]
+}
